@@ -1,6 +1,19 @@
+<div align="center">
+
 # Dokis
 
-**Your RAG pipeline is making things up. Dokis tells you exactly which claims have no source - in milliseconds, without an LLM call.**
+### Runtime provenance enforcement for RAG pipelines.
+### Every claim. Every source. Zero LLM calls.
+
+<br/>
+
+[![PyPI](https://img.shields.io/pypi/v/dokis?color=0ea5e9&label=PyPI&logo=pypi&logoColor=white)](https://pypi.org/project/dokis/)
+[![Python](https://img.shields.io/pypi/pyversions/dokis?color=3b82f6&logo=python&logoColor=white)](https://pypi.org/project/dokis/)
+[![CI](https://img.shields.io/github/actions/workflow/status/Vbj1808/dokis/ci.yml?label=CI&logo=github)](https://github.com/Vbj1808/dokis/actions)
+[![License: MIT](https://img.shields.io/badge/license-MIT-22c55e?logo=opensourceinitiative&logoColor=white)](LICENSE)
+[![Downloads](https://img.shields.io/pypi/dm/dokis?color=a855f7&label=installs)](https://pypi.org/project/dokis/)
+
+<br/>
 
 ```bash
 pip install dokis
@@ -11,10 +24,16 @@ import dokis
 
 result = dokis.audit(query, chunks, response)
 
-if not result.passed:
-    print(result.violations)      # which claims have no source
-    print(result.provenance_map)  # which do, and where they came from
+print(result.compliance_rate)   # 0.92
+print(result.provenance_map)    # { "Aspirin inhibits COX...": "pubmed.gov/..." }
+print(result.violations)        # claims with no source
 ```
+
+<br/>
+
+![Dokis architecture](assets/diagram.jpeg)
+
+</div>
 
 ---
 
@@ -24,15 +43,11 @@ Every RAG pipeline has the same failure mode. The LLM takes five retrieved chunk
 
 Existing tools don't solve this at runtime:
 
-- **RAGAS** evaluates offline. It can't catch a hallucination before it
-  reaches a user.
-- **LLM guardrails** handle safety and policy enforcement well - toxicity,
-  jailbreaks, off-topic content. Their provenance validators strip
-  unsupported sentences but don't return a structured claim→URL map,
-  a compliance rate, or a source allowlist.
+- **RAGAS** evaluates offline. It can't catch a hallucination before it reaches a user.
+- **LLM guardrails** handle safety and policy enforcement well — toxicity, jailbreaks, off-topic content. Their provenance validators strip unsupported sentences but don't return a structured claim→URL map, a compliance rate, or a source allowlist.
 - **Prompt engineering** reduces the problem. It doesn't eliminate it.
 
-Dokis sits inline - between your retriever and your LLM response going out - and enforces provenance in real time.
+Dokis sits inline — between your retriever and your LLM response going out — and enforces provenance in real time.
 
 ---
 
@@ -66,7 +81,7 @@ Measured on Python 3.12. Medians over 10 warm runs.
 | `bm25` (default) | **0.96 ms** | 1.29 ms |
 | `semantic` | **21.99 ms** | 31.45 ms |
 
-BM25 is **23× faster** per audit call. The BM25 index is cached per chunk set - repeated calls against the same chunks stay sub-millisecond.
+BM25 is **23× faster** per audit call. The BM25 index is cached per chunk set — repeated calls against the same chunks stay sub-millisecond.
 
 ### Install footprint
 
@@ -81,7 +96,7 @@ BM25 is **23× faster** per audit call. The BM25 index is cached per chunk set -
 | `bm25` (default) | 5/5 | 4/4 ✦ |
 | `semantic` | 5/5 | 4/4 ✦ |
 
-✦ One claim was 7 words - below the 8-word minimum - and filtered before matching. Effective ungrounded rejection rate is 100% for both matchers.
+✦ One claim was 7 words — below the 8-word minimum — and filtered before matching. Effective ungrounded rejection rate is 100% for both matchers.
 
 ---
 
@@ -230,8 +245,6 @@ record = result.model_dump_json()  # fully JSON-serialisable
 
 ## Comparison
 
-## Comparison
-
 | | Dokis | RAGAS | LLM guardrails |
 |---|---|---|---|
 | Runtime enforcement | ✅ | ❌ offline only | ✅ |
@@ -245,8 +258,7 @@ record = result.model_dump_json()  # fully JSON-serialisable
 | Core install size | ~42 MB | — | — |
 
 ✦ ProvenanceEmbeddings uses no LLM call. ProvenanceLLM requires one.
-✧ Guardrails strips unsupported sentences from the response.
-  Dokis returns a structured claim→URL map you can store and query.
+✧ Guardrails strips unsupported sentences from the response. Dokis returns a structured claim→URL map you can store and query.
 
 ---
 
@@ -259,5 +271,3 @@ record = result.model_dump_json()  # fully JSON-serialisable
 ## License
 
 MIT
-
----
