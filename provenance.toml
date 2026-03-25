@@ -1,0 +1,17 @@
+# Dokis configuration - copy and customise for your project.
+# Load with: config = dokis.Config.from_yaml("provenance.toml")
+
+allowed_domains = [
+    "pubmed.ncbi.nlm.nih.gov",
+    "cochrane.org",
+    "nejm.org",
+    "who.int",
+]
+
+min_citation_rate = 0.85
+claim_threshold   = 0.30
+extractor         = "regex"
+matcher           = "bm25"
+model             = "all-MiniLM-L6-v2"
+fail_on_violation = false
+domain            = "oncology"
