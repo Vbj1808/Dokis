@@ -90,4 +90,4 @@ class ProvenanceQueryEngine:
         if response.metadata is None:
             response.metadata = {}
         response.metadata["provenance"] = result
-        return response  # type: ignore[no-any-return]
+        return response

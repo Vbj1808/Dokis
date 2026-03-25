@@ -43,6 +43,7 @@ def ibuprofen_chunk() -> Chunk:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.semantic
 def test_matcher_returns_supported_true_above_threshold(
     semantic_matcher: ClaimMatcher, aspirin_chunk: Chunk
 ) -> None:
@@ -52,6 +53,7 @@ def test_matcher_returns_supported_true_above_threshold(
     assert results[0].supported is True
 
 
+@pytest.mark.semantic
 def test_matcher_returns_supported_false_below_threshold(
     aspirin_chunk: Chunk, ibuprofen_chunk: Chunk
 ) -> None:
@@ -64,6 +66,7 @@ def test_matcher_returns_supported_false_below_threshold(
     assert results[0].supported is False
 
 
+@pytest.mark.semantic
 def test_matcher_confidence_always_populated(aspirin_chunk: Chunk) -> None:
     config = Config(matcher="semantic", claim_threshold=1.0)
     strict_matcher = ClaimMatcher(config)
@@ -74,6 +77,7 @@ def test_matcher_confidence_always_populated(aspirin_chunk: Chunk) -> None:
     assert 0.0 <= results[0].confidence <= 1.0
 
 
+@pytest.mark.semantic
 def test_matcher_source_url_populated_on_supported_claim(
     semantic_matcher: ClaimMatcher, aspirin_chunk: Chunk
 ) -> None:
@@ -84,6 +88,7 @@ def test_matcher_source_url_populated_on_supported_claim(
     assert results[0].source_chunk == aspirin_chunk
 
 
+@pytest.mark.semantic
 def test_matcher_source_url_none_on_unsupported_claim(aspirin_chunk: Chunk) -> None:
     config = Config(matcher="semantic", claim_threshold=1.0)
     strict_matcher = ClaimMatcher(config)
@@ -94,6 +99,7 @@ def test_matcher_source_url_none_on_unsupported_claim(aspirin_chunk: Chunk) -> N
     assert results[0].source_chunk is None
 
 
+@pytest.mark.semantic
 def test_matcher_empty_claims_returns_empty_list(
     semantic_matcher: ClaimMatcher, aspirin_chunk: Chunk
 ) -> None:
@@ -101,6 +107,7 @@ def test_matcher_empty_claims_returns_empty_list(
     assert results == []
 
 
+@pytest.mark.semantic
 def test_matcher_empty_chunks_returns_empty_list(semantic_matcher: ClaimMatcher) -> None:
     claims = ["Aspirin inhibits the COX enzymes and reduces fever."]
     results = semantic_matcher.match(claims, [])

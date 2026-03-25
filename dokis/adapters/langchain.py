@@ -21,7 +21,7 @@ from dokis.models import Chunk
 logger = logging.getLogger(__name__)
 
 
-class ProvenanceRetriever(BaseRetriever):
+class ProvenanceRetriever(BaseRetriever):  # type: ignore[misc]
     """LangChain retriever that enforces source provenance via DomainEnforcer.
 
     Wraps any existing LangChain ``BaseRetriever`` and filters its results
@@ -60,7 +60,7 @@ class ProvenanceRetriever(BaseRetriever):
         url_metadata_key: str = "source",
         **kwargs: Any,
     ) -> None:
-        super().__init__(  # type: ignore[call-arg]
+        super().__init__(
             base_retriever=base_retriever,
             config=config or Config(),
             url_metadata_key=url_metadata_key,

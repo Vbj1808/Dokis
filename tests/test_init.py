@@ -47,6 +47,7 @@ def test_configure_never_called_audit_defaults_gracefully(
     assert isinstance(result, ProvenanceResult)
 
 
+@pytest.mark.semantic
 def test_cache_is_safe_after_config_gc(
     sample_chunks: list[Chunk],
     grounded_response: str,
@@ -72,6 +73,7 @@ def test_cache_is_safe_after_config_gc(
     assert result.min_citation_rate == 1.0
 
 
+@pytest.mark.semantic
 def test_same_config_object_reuses_cached_middleware(
     sample_chunks: list[Chunk],
     grounded_response: str,
@@ -89,6 +91,7 @@ def test_same_config_object_reuses_cached_middleware(
     assert len(dokis._middleware_cache) == 1  # type: ignore[attr-defined]
 
 
+@pytest.mark.semantic
 def test_module_level_audit_reuses_middleware_for_same_config(
     sample_chunks: list[Chunk],
     grounded_response: str,

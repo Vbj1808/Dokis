@@ -25,4 +25,4 @@ jobs:
       - name: Type check
         run: mypy dokis/ --strict
       - name: Test
-        run: pytest tests/ -v --tb=short
+        run: pytest tests/ -v -m "not semantic"

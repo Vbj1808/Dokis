@@ -7,6 +7,7 @@ import os
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 
 try:
     from sentence_transformers import SentenceTransformer
@@ -15,7 +16,7 @@ except ImportError:
     _SEMANTIC_AVAILABLE = False
 
 try:
-    import bm25s  # type: ignore[import-untyped]
+    import bm25s
     _BM25_AVAILABLE: bool = True
 except ImportError:
     _BM25_AVAILABLE = False
@@ -46,7 +47,9 @@ _MAX_BM25_CACHE_SIZE: int = int(
 )
 
 
-def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+def _cosine_similarity(
+    a: npt.NDArray[np.float64], b: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
     """Compute cosine similarity matrix between row-vectors in a and b.
 
     Args:
@@ -209,8 +212,11 @@ class ClaimMatcher:
             doc_indices, scores = retriever.retrieve(
                 query_tokens, k=len(chunks)
             )
-            scores_1d: np.ndarray = np.asarray(scores[0], dtype=np.float64)
-            indices_1d: np.ndarray = np.asarray(doc_indices[0], dtype=np.int64)
+            scores_1d: npt.NDArray[np.float64] = np.asarray(scores[0], dtype=np.float64)
+            indices_1d: npt.NDArray[np.int64] = np.asarray(
+                doc_indices[0], dtype=np.int64
+            )
+
 
             max_score = float(scores_1d.max()) if scores_1d.size > 0 else 0.0
 
@@ -264,13 +270,13 @@ class ClaimMatcher:
             One Claim per input claim, in the same order.
         """
         chunk_texts = [c.content for c in chunks]
-        claim_embeddings: np.ndarray = np.array(
+        claim_embeddings: npt.NDArray[np.float64] = np.array(
             self._model.encode(claims, convert_to_numpy=True)
         )
-        chunk_embeddings: np.ndarray = np.array(
+        chunk_embeddings: npt.NDArray[np.float64] = np.array(
             self._model.encode(chunk_texts, convert_to_numpy=True)
         )
-        sim_matrix: np.ndarray = _cosine_similarity(
+        sim_matrix: npt.NDArray[np.float64] = _cosine_similarity(
             claim_embeddings, chunk_embeddings
         )
         result: list[Claim] = []

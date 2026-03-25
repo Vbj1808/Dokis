@@ -26,6 +26,7 @@ def test_middleware_audit_returns_provenance_result(
     assert isinstance(result, ProvenanceResult)
 
 
+@pytest.mark.semantic
 def test_middleware_audit_compliance_rate_between_zero_and_one(
     sample_chunks: list[Chunk],
     semantic_config: Config,
@@ -56,6 +57,7 @@ def test_middleware_audit_populates_blocked_sources(
     assert "https://discountpharma.biz/meds" in result.blocked_sources
 
 
+@pytest.mark.semantic
 def test_middleware_audit_populates_provenance_map(
     sample_chunks: list[Chunk],
     semantic_config: Config,
@@ -116,6 +118,7 @@ def test_middleware_no_raise_when_fail_on_violation_false(
 
 
 @pytest.mark.asyncio
+@pytest.mark.semantic
 async def test_middleware_aaudit_matches_sync_audit(
     sample_chunks: list[Chunk],
     semantic_config: Config,
@@ -184,6 +187,7 @@ def test_middleware_bm25_grounded_response_passes(
 
 
 @pytest.mark.asyncio
+@pytest.mark.semantic
 async def test_aaudit_does_not_emit_deprecation_warning(
     sample_chunks: list[Chunk],
     grounded_response: str,

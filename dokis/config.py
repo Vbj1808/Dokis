@@ -12,9 +12,9 @@ if sys.version_info >= (3, 11):
     import tomllib
 else:
     try:
-        import tomllib  # type: ignore[import-not-found]
+        import tomllib
     except ImportError:
-        import tomli as tomllib  # type: ignore[import-not-found]
+        import tomli as tomllib
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing_extensions import Self
