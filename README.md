@@ -1,17 +1,14 @@
 <div align="center">
 
-# Dokis
-
-### Runtime provenance enforcement for RAG pipelines.
-### Every claim. Every source. Zero LLM calls.
+![Dokis banner](assets/banner.svg)
 
 <br/>
 
-[![PyPI](https://img.shields.io/pypi/v/dokis?color=0ea5e9&label=PyPI&logo=pypi&logoColor=white)](https://pypi.org/project/dokis/)
+[![PyPI](https://img.shields.io/pypi/v/dokis?color=1D9E75&label=PyPI&logo=pypi&logoColor=white)](https://pypi.org/project/dokis/)
 [![Python](https://img.shields.io/pypi/pyversions/dokis?color=3b82f6&logo=python&logoColor=white)](https://pypi.org/project/dokis/)
 [![CI](https://img.shields.io/github/actions/workflow/status/Vbj1808/dokis/ci.yml?label=CI&logo=github)](https://github.com/Vbj1808/dokis/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e?logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Downloads](https://img.shields.io/pypi/dm/dokis?color=a855f7&label=installs)](https://pypi.org/project/dokis/)
+<!-- [![Downloads](https://img.shields.io/pypi/dm/dokis?color=a855f7&label=installs)](https://pypi.org/project/dokis/) -->
 
 <br/>
 
@@ -31,6 +28,10 @@ print(result.violations)        # claims with no source
 
 <br/>
 
+![Dokis CLI demo](assets/demo.gif)
+
+<br/>
+
 ![Dokis architecture](assets/diagram.jpeg)
 
 </div>
@@ -44,10 +45,10 @@ Every RAG pipeline has the same failure mode. The LLM takes five retrieved chunk
 Existing tools don't solve this at runtime:
 
 - **RAGAS** evaluates offline. It can't catch a hallucination before it reaches a user.
-- **LLM guardrails** handle safety and policy enforcement well — toxicity, jailbreaks, off-topic content. Their provenance validators strip unsupported sentences but don't return a structured claim→URL map, a compliance rate, or a source allowlist.
+- **LLM guardrails** handle safety and policy enforcement well - toxicity, jailbreaks, off-topic content. Their provenance validators strip unsupported sentences but don't return a structured claim→URL map, a compliance rate, or a source allowlist.
 - **Prompt engineering** reduces the problem. It doesn't eliminate it.
 
-Dokis sits inline — between your retriever and your LLM response going out — and enforces provenance in real time.
+Dokis sits inline - between your retriever and your LLM response going out - and enforces provenance in real time.
 
 ---
 
@@ -71,7 +72,7 @@ Measured on Python 3.12. Medians over 10 warm runs.
 
 | Matcher | Cold start | What loads |
 |---|---|---|
-| `bm25` (default) | **~0 ms** | Nothing — pure Python |
+| `bm25` (default) | **~0 ms** | Nothing - pure Python |
 | `semantic` | **~1,666 ms** | `all-MiniLM-L6-v2` (~80 MB) |
 
 ### Per-call audit latency (5 chunks, 3 claims)
@@ -81,7 +82,7 @@ Measured on Python 3.12. Medians over 10 warm runs.
 | `bm25` (default) | **0.96 ms** | 1.29 ms |
 | `semantic` | **21.99 ms** | 31.45 ms |
 
-BM25 is **23× faster** per audit call. The BM25 index is cached per chunk set — repeated calls against the same chunks stay sub-millisecond.
+BM25 is **23× faster** per audit call. The BM25 index is cached per chunk set - repeated calls against the same chunks stay sub-millisecond.
 
 ### Install footprint
 
@@ -96,7 +97,7 @@ BM25 is **23× faster** per audit call. The BM25 index is cached per chunk set �
 | `bm25` (default) | 5/5 | 4/4 ✦ |
 | `semantic` | 5/5 | 4/4 ✦ |
 
-✦ One claim was 7 words — below the 8-word minimum — and filtered before matching. Effective ungrounded rejection rate is 100% for both matchers.
+✦ One claim was 7 words - below the 8-word minimum - and filtered before matching. Effective ungrounded rejection rate is 100% for both matchers.
 
 ---
 
@@ -146,7 +147,7 @@ if not result.passed:
     raise dokis.ComplianceViolation(result)
 ```
 
-### LangChain — two lines
+### LangChain - two lines
 
 ```python
 from dokis.adapters.langchain import ProvenanceRetriever
@@ -170,6 +171,14 @@ engine = ProvenanceQueryEngine(
 )
 response = engine.query("What reduces fever?")
 result   = response.metadata["provenance"]
+```
+
+### CLI
+
+```bash
+dokis audit input.json
+dokis audit input.json --config provenance.toml
+cat input.json | dokis audit -
 ```
 
 ### Reusable middleware (production pattern)
@@ -201,7 +210,7 @@ result = await mw.aaudit(query, chunks, response)
 dokis.Config(
     allowed_domains   = [],
     min_citation_rate = 0.80,
-    claim_threshold   = 0.72,
+    claim_threshold   = 0.35,
     extractor         = "regex",        # "regex" | "nltk" | "llm"
     matcher           = "bm25",         # "bm25" | "semantic"
     model             = "all-MiniLM-L6-v2",
@@ -254,11 +263,21 @@ record = result.model_dump_json()  # fully JSON-serialisable
 | Compliance rate per response | ✅ | ❌ | ❌ |
 | LangChain integration | ✅ drop-in retriever | ✅ evaluation wrapper | varies |
 | JSON-serialisable audit log | ✅ per-response | ❌ | ❌ |
-| Cold start | ~0 ms | — | varies |
-| Core install size | ~42 MB | — | — |
+| Cold start | ~0 ms | - | varies |
+| Core install size | ~42 MB | - | - |
 
 ✦ ProvenanceEmbeddings uses no LLM call. ProvenanceLLM requires one.
 ✧ Guardrails strips unsupported sentences from the response. Dokis returns a structured claim→URL map you can store and query.
+
+---
+
+## Examples
+
+Three working demos in [dokis-examples](https://github.com/Vbj1808/dokis-examples):
+
+- **01 - Local files** - txt files + BM25 + Ollama
+- **02 - Chroma vector store** - Chroma + nomic-embed-text + Ollama
+- **03 - Live web search** - Serper API + domain allowlisting + Ollama
 
 ---
 
