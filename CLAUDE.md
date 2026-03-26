@@ -65,6 +65,7 @@ dokis/
 ├── provenance.toml              ← example config file
 ├── dokis/
 │   ├── __init__.py              ← entire public API
+|   ├── cli.py                   ← NEW — argparse CLI, `dokis audit`
 │   ├── config.py                ← Config - TOML and dict ingestion
 │   ├── models.py                ← Pydantic v2: Chunk, Claim, ProvenanceResult
 │   ├── exceptions.py            ← ComplianceViolation, DomainViolation
@@ -79,6 +80,7 @@ dokis/
 │       └── llamaindex.py        ← ProvenanceQueryEngine
 └── tests/
     ├── conftest.py              ← shared fixtures
+    ├── test_cli.py              ← NEW - 26 tests
     ├── test_enforcer.py         ← 8 tests
     ├── test_extractor.py        ← 9 tests
     ├── test_matcher.py          ← 16 tests
@@ -116,6 +118,60 @@ ruff check dokis/ && mypy dokis/ --strict && pytest tests/ -v
 ```
 
 ---
+
+## CLI
+
+Dokis ships a `dokis` command for quick terminal-based auditing.
+
+### Usage
+```bash
+# Audit a JSON file
+dokis audit input.json
+
+# Audit with a custom config
+dokis audit input.json --config provenance.toml
+
+# Pipe from stdin
+cat input.json | dokis audit -
+```
+
+### Input format
+
+The input JSON must be an object with three keys:
+```json
+{
+  "query": "What are the side effects of aspirin?",
+  "chunks": [
+    {
+      "content": "Aspirin inhibits COX-1 and COX-2 enzymes.",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/12345",
+      "metadata": {}
+    }
+  ],
+  "response": "Aspirin inhibits COX enzymes."
+}
+```
+
+- `query` (str): the user query.
+- `chunks` (list): each must have `content` and `source_url`. `metadata` is
+  optional.
+- `response` (str): the LLM-generated response to audit.
+
+### Output
+
+Prints a human-readable report to stdout. Exit code `0` if compliance passes,
+`1` if it fails or on input error.
+
+### Module: `dokis/cli.py`
+
+Not part of the public API. Users interact via the terminal command, not via
+`import dokis.cli`. The module uses `argparse` (stdlib) — zero new deps.
+
+### Tests: `tests/test_cli.py` — 26 tests
+
+Covers: input validation (8), chunk parsing (2), report formatting (8),
+argument parsing (3), integration (5). Includes stdin, missing files,
+malformed JSON, truncation, exit codes, and config loading.
 
 ## Public API
 
@@ -476,9 +532,10 @@ tests/
 ├── test_adapters.py   ← 8 tests  - LangChain + LlamaIndex adapters
 ├── test_init.py       ← 7 tests  - module-level API, thread safety, cache
 └── test_config.py     ← 2 tests  - TOML loading, YAML rejection
+└── test_cli.py        ← NEW - 26 tests
 ```
 
-**Total: 86 tests.**
+**Total: 112 tests.**
 
 **Rules:**
 - Do not mock `ClaimMatcher` in middleware tests - use real embeddings with
@@ -559,7 +616,7 @@ plausible-looking result that hides a bug.
 
 ## Release checklist
 
-- [ ] `pytest tests/ -v` - all 86 pass
+- [ ] `pytest tests/ -v` - all 112 pass
 - [ ] `mypy dokis/ --strict` - zero errors
 - [ ] `ruff check dokis/` - zero warnings
 - [ ] Version bumped in `pyproject.toml` and `dokis/__init__.py`

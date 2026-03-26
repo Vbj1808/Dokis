@@ -78,3 +78,7 @@ asyncio_default_test_loop_scope = "function"
 markers = [
     "semantic: tests that require sentence-transformers (pip install dokis[semantic])",
 ]
+
+
+[project.scripts]
+dokis = "dokis.cli:main"
