@@ -8,31 +8,6 @@
 [![Python](https://img.shields.io/pypi/pyversions/dokis?color=3b82f6&logo=python&logoColor=white)](https://pypi.org/project/dokis/)
 [![CI](https://img.shields.io/github/actions/workflow/status/Vbj1808/dokis/ci.yml?label=CI&logo=github)](https://github.com/Vbj1808/dokis/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e?logo=opensourceinitiative&logoColor=white)](LICENSE)
-<!-- [![Downloads](https://img.shields.io/pypi/dm/dokis?color=a855f7&label=installs)](https://pypi.org/project/dokis/) -->
-
-<br/>
-
-```bash
-pip install dokis
-```
-
-```python
-import dokis
-
-result = dokis.audit(query, chunks, response)
-
-print(result.compliance_rate)   # 0.92
-print(result.provenance_map)    # { "Aspirin inhibits COX...": "pubmed.gov/..." }
-print(result.violations)        # claims with no source
-```
-
-<br/>
-
-![Dokis CLI demo](assets/demo.gif)
-
-<br/>
-
-![Dokis architecture](assets/diagram.jpeg)
 
 </div>
 
@@ -62,58 +37,39 @@ Dokis does exactly two things:
 
 No LLM call. No API key. No network request after startup. Deterministic output.
 
----
+<div align="center">
 
-## Benchmarks
+![Dokis architecture](assets/diagram.jpeg)
 
-Measured on Python 3.12. Medians over 10 warm runs.
-
-### Cold start
-
-| Matcher | Cold start | What loads |
-|---|---|---|
-| `bm25` (default) | **~0 ms** | Nothing - pure Python |
-| `semantic` | **~1,666 ms** | `all-MiniLM-L6-v2` (~80 MB) |
-
-### Per-call audit latency (5 chunks, 3 claims)
-
-| Matcher | Median | p95 |
-|---|---|---|
-| `bm25` (default) | **0.96 ms** | 1.29 ms |
-| `semantic` | **21.99 ms** | 31.45 ms |
-
-BM25 is **23× faster** per audit call. The BM25 index is cached per chunk set - repeated calls against the same chunks stay sub-millisecond.
-
-### Install footprint
-
-| `pip install dokis` | `pip install dokis[semantic]` |
-|---|---|
-| ~42 MB (pydantic + numpy + bm25s) | ~135 MB (+ model weights) |
-
-### Accuracy (5 grounded + 5 ungrounded claims)
-
-| Matcher | Grounded detected | Ungrounded rejected |
-|---|---|---|
-| `bm25` (default) | 5/5 | 4/4 ✦ |
-| `semantic` | 5/5 | 4/4 ✦ |
-
-✦ One claim was 7 words - below the 8-word minimum - and filtered before matching. Effective ungrounded rejection rate is 100% for both matchers.
+</div>
 
 ---
 
-## Installation
+## See it in action
 
-```bash
-pip install dokis                  # BM25 default, zero cold start
-pip install dokis[semantic]        # adds SentenceTransformer matching
-pip install dokis[nltk]            # adds NLTK sentence splitting
-pip install dokis[langchain]       # adds LangChain ProvenanceRetriever
-pip install dokis[llamaindex]      # adds LlamaIndex ProvenanceQueryEngine
-```
+<div align="center">
+
+![Dokis CLI demo](assets/demo.gif)
+
+</div>
 
 ---
 
 ## Quickstart
+
+```bash
+pip install dokis
+```
+
+```python
+import dokis
+
+result = dokis.audit(query, chunks, response)
+
+print(result.compliance_rate)   # 0.92
+print(result.provenance_map)    # { "Aspirin inhibits COX...": "pubmed.gov/..." }
+print(result.violations)        # claims with no source
+```
 
 ### Zero config
 
@@ -204,6 +160,18 @@ result = await mw.aaudit(query, chunks, response)
 
 ---
 
+## Installation
+
+```bash
+pip install dokis                  # BM25 default, zero cold start
+pip install dokis[semantic]        # adds SentenceTransformer matching
+pip install dokis[nltk]            # adds NLTK sentence splitting
+pip install dokis[langchain]       # adds LangChain ProvenanceRetriever
+pip install dokis[llamaindex]      # adds LlamaIndex ProvenanceQueryEngine
+```
+
+---
+
 ## Configuration
 
 ```python
@@ -249,6 +217,43 @@ claim.source_chunk       # Chunk | None
 
 record = result.model_dump_json()  # fully JSON-serialisable
 ```
+
+---
+
+## Benchmarks
+
+Measured on Python 3.12. Medians over 10 warm runs.
+
+### Cold start
+
+| Matcher | Cold start | What loads |
+|---|---|---|
+| `bm25` (default) | **~0 ms** | Nothing - pure Python |
+| `semantic` | **~1,666 ms** | `all-MiniLM-L6-v2` (~80 MB) |
+
+### Per-call audit latency (5 chunks, 3 claims)
+
+| Matcher | Median | p95 |
+|---|---|---|
+| `bm25` (default) | **0.96 ms** | 1.29 ms |
+| `semantic` | **21.99 ms** | 31.45 ms |
+
+BM25 is **23× faster** per audit call. The BM25 index is cached per chunk set - repeated calls against the same chunks stay sub-millisecond.
+
+### Install footprint
+
+| `pip install dokis` | `pip install dokis[semantic]` |
+|---|---|
+| ~42 MB (pydantic + numpy + bm25s) | ~135 MB (+ model weights) |
+
+### Accuracy (5 grounded + 5 ungrounded claims)
+
+| Matcher | Grounded detected | Ungrounded rejected |
+|---|---|---|
+| `bm25` (default) | 5/5 | 4/4 ✦ |
+| `semantic` | 5/5 | 4/4 ✦ |
+
+✦ One claim was 7 words - below the 8-word minimum - and filtered before matching. Effective ungrounded rejection rate is 100% for both matchers.
 
 ---
 
