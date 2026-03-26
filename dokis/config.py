@@ -69,7 +69,7 @@ class Config(BaseModel):
 
     allowed_domains: list[str] = Field(default_factory=list)
     min_citation_rate: float = 0.80
-    claim_threshold: float = 0.72
+    claim_threshold: float = 0.35
     extractor: Literal["regex", "nltk", "llm"] = "regex"
     matcher: Literal["bm25", "semantic"] = "bm25"
     model: str = "all-MiniLM-L6-v2"
