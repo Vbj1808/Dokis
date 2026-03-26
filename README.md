@@ -194,6 +194,7 @@ dokis.Config(
 **Load from TOML:**
 
 ```python
+# method is named from_yaml for backwards compatibility - pass a .toml file
 config = dokis.Config.from_yaml("provenance.toml")
 ```
 
