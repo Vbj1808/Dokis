@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, cast
@@ -22,6 +23,52 @@ from typing import Any, cast
 from dokis.config import Config
 from dokis.middleware import ProvenanceMiddleware
 from dokis.models import Chunk
+
+# ---------------------------------------------------------------------------
+# Colour helpers — disabled when stdout is not a TTY or NO_COLOR is set.
+# ---------------------------------------------------------------------------
+
+_COLOURS_ENABLED: bool = (
+    sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
+)
+
+_RESET  = "\033[0m"   if _COLOURS_ENABLED else ""
+_BOLD   = "\033[1m"   if _COLOURS_ENABLED else ""
+_DIM    = "\033[2m"   if _COLOURS_ENABLED else ""
+_GREEN  = "\033[32m"  if _COLOURS_ENABLED else ""
+_RED    = "\033[31m"  if _COLOURS_ENABLED else ""
+_YELLOW = "\033[33m"  if _COLOURS_ENABLED else ""
+_CYAN   = "\033[36m"  if _COLOURS_ENABLED else ""
+_WHITE  = "\033[97m"  if _COLOURS_ENABLED else ""
+
+
+def _green(text: str) -> str:
+    return f"{_GREEN}{text}{_RESET}"
+
+
+def _red(text: str) -> str:
+    return f"{_RED}{text}{_RESET}"
+
+
+def _yellow(text: str) -> str:
+    return f"{_YELLOW}{text}{_RESET}"
+
+
+def _cyan(text: str) -> str:
+    return f"{_CYAN}{text}{_RESET}"
+
+
+def _dim(text: str) -> str:
+    return f"{_DIM}{text}{_RESET}"
+
+
+def _bold(text: str) -> str:
+    return f"{_BOLD}{text}{_RESET}"
+
+
+# ---------------------------------------------------------------------------
+# Input loading
+# ---------------------------------------------------------------------------
 
 
 def _load_input(path: str) -> dict[str, Any]:
@@ -74,6 +121,11 @@ def _load_input(path: str) -> dict[str, Any]:
     return cast(dict[str, Any], data)
 
 
+# ---------------------------------------------------------------------------
+# Chunk parsing
+# ---------------------------------------------------------------------------
+
+
 def _parse_chunks(raw_chunks: list[dict[str, Any]]) -> list[Chunk]:
     """Convert raw JSON chunk dicts to Chunk models.
 
@@ -93,12 +145,17 @@ def _parse_chunks(raw_chunks: list[dict[str, Any]]) -> list[Chunk]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Report formatting
+# ---------------------------------------------------------------------------
+
+
 def _format_report(
     query: str,
     result: Any,
     config: Config,
 ) -> str:
-    """Build a human-readable provenance report.
+    """Build a human-readable provenance report with colour formatting.
 
     Args:
         query: The original user query.
@@ -110,63 +167,90 @@ def _format_report(
     """
     lines: list[str] = []
     lines.append("")
-    lines.append("Dokis Provenance Audit")
-    lines.append("=" * 54)
+    lines.append(_bold(_white("Dokis Provenance Audit")))
+    lines.append(_dim("=" * 54))
     lines.append("")
-    lines.append(f"  Query:     {query}")
-    lines.append(f"  Matcher:   {config.matcher}")
-    lines.append(f"  Threshold: {config.claim_threshold}")
+    lines.append(f"  {_dim('Query:')}     {query}")
+    lines.append(f"  {_dim('Matcher:')}   {_cyan(config.matcher)}")
+    lines.append(f"  {_dim('Threshold:')} {config.claim_threshold}")
     lines.append("")
 
     # Claims table
     if result.claims:
-        lines.append("  Claims")
-        lines.append("  " + "-" * 50)
+        lines.append(f"  {_bold('Claims')}")
+        lines.append("  " + _dim("-" * 50))
         for claim in result.claims:
-            icon = "\u2713" if claim.supported else "\u2717"
+            if claim.supported:
+                icon = _green("\u2713")
+                text_color = _white
+            else:
+                icon = _red("\u2717")
+                text_color = _dim
+
             conf = f"{claim.confidence:.2f}"
             url = claim.source_url or "\u2014"
 
-            # Truncate long claim text for terminal readability
             text = claim.text
             if len(text) > 52:
                 text = text[:49] + "..."
 
-            lines.append(f"  {icon} {text}")
-            lines.append(f"    confidence: {conf}  source: {url}")
+            lines.append(f"  {icon} {text_color(text)}")
+            lines.append(
+                f"    {_dim('confidence:')} {conf}  "
+                f"{_dim('source:')} {_cyan(url) if claim.source_url else _dim(url)}"
+            )
         lines.append("")
     else:
-        lines.append("  No claims extracted.")
+        lines.append(_dim("  No claims extracted."))
         lines.append("")
 
     # Summary
     rate = result.compliance_rate
     threshold = result.min_citation_rate
-    status = "PASSED" if result.passed else "FAILED"
-    lines.append(f"  Compliance: {rate:.1%} (threshold: {threshold:.1%})")
-    lines.append(f"  Status:     {status}")
+    passed = result.passed
+
+    status = _green("PASSED") if passed else _red("FAILED")
+    rate_str = _green(f"{rate:.1%}") if passed else _red(f"{rate:.1%}")
+
+    lines.append(
+        f"  {_dim('Compliance:')} {rate_str} "
+        f"{_dim(f'(threshold: {threshold:.1%})')}"
+    )
+    lines.append(f"  {_dim('Status:')}     {_bold(status)}")
     lines.append("")
 
     # Violations
     if result.violations:
-        lines.append("  Violations")
-        lines.append("  " + "-" * 50)
+        lines.append(f"  {_bold(_red('Violations'))}")
+        lines.append("  " + _dim("-" * 50))
         for v in result.violations:
             text = v.text
             if len(text) > 60:
                 text = text[:57] + "..."
-            lines.append(f'  \u2022 "{text}" (confidence: {v.confidence:.2f})')
+            lines.append(
+                f"  {_red(chr(8226))} {_dim(repr(text))} "
+                f"{_dim(f'(confidence: {v.confidence:.2f})')}"
+            )
         lines.append("")
 
     # Blocked sources
     if result.blocked_sources:
-        lines.append("  Blocked sources")
-        lines.append("  " + "-" * 50)
+        lines.append(f"  {_bold(_yellow('Blocked sources'))}")
+        lines.append("  " + _dim("-" * 50))
         for src in result.blocked_sources:
-            lines.append(f"  \u2022 {src}")
+            lines.append(f"  {_yellow(chr(8226))} {_dim(src)}")
         lines.append("")
 
     return "\n".join(lines)
+
+
+def _white(text: str) -> str:
+    return f"{_WHITE}{text}{_RESET}"
+
+
+# ---------------------------------------------------------------------------
+# Error helper
+# ---------------------------------------------------------------------------
 
 
 def _exit_error(message: str) -> None:
@@ -175,8 +259,13 @@ def _exit_error(message: str) -> None:
     Args:
         message: The error message to display.
     """
-    print(f"dokis: error: {message}", file=sys.stderr)
+    print(f"{_red('dokis: error:')} {message}", file=sys.stderr)
     sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Argument parser
+# ---------------------------------------------------------------------------
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -212,6 +301,11 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# ---------------------------------------------------------------------------
+# Entry points
+# ---------------------------------------------------------------------------
+
+
 def main(argv: list[str] | None = None) -> None:
     """Entry point for the dokis CLI.
 
@@ -235,7 +329,6 @@ def _run_audit(args: argparse.Namespace) -> None:
     Args:
         args: Parsed CLI arguments with 'input' and optional 'config'.
     """
-    # Load config
     if args.config:
         config_path = Path(args.config)
         if not config_path.exists():
@@ -244,20 +337,16 @@ def _run_audit(args: argparse.Namespace) -> None:
     else:
         config = Config()
 
-    # Load and parse input
     data = _load_input(args.input)
     query: str = data["query"]
     chunks = _parse_chunks(data["chunks"])
     response: str = data["response"]
 
-    # Run audit
     mw = ProvenanceMiddleware(config)
     result = mw.audit(query, chunks, response)
 
-    # Output
     report = _format_report(query, result, config)
     print(report)
 
-    # Exit code reflects compliance
     if not result.passed:
         sys.exit(1)
