@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dokis"
-version = "0.1.0"
+version = "0.1.1"
 description = "Lightweight RAG provenance middleware. Verifies every claim in an LLM response is grounded in a retrieved source - without an LLM call."
 readme = "README.md"
 requires-python = ">=3.10"
