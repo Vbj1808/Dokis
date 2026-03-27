@@ -5,7 +5,7 @@
 <br/>
 
 [![PyPI](https://img.shields.io/pypi/v/dokis?color=1D9E75&label=PyPI&logo=pypi&logoColor=white)](https://pypi.org/project/dokis/)
-[![Python](https://img.shields.io/pypi/pyversions/dokis?color=3b82f6&logo=python&logoColor=white)](https://pypi.org/project/dokis/)
+[![Python](https://img.shields.io/pypi/pyversions/dokis?v=1&color=3b82f6&logo=python&logoColor=white)](https://pypi.org/project/dokis/)
 [![CI](https://img.shields.io/github/actions/workflow/status/Vbj1808/dokis/ci.yml?label=CI&logo=github)](https://github.com/Vbj1808/dokis/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e?logo=opensourceinitiative&logoColor=white)](LICENSE)
 
@@ -56,20 +56,6 @@ No LLM call. No API key. No network request after startup. Deterministic output.
 ---
 
 ## Quickstart
-
-```bash
-pip install dokis
-```
-
-```python
-import dokis
-
-result = dokis.audit(query, chunks, response)
-
-print(result.compliance_rate)   # 0.92
-print(result.provenance_map)    # { "Aspirin inhibits COX...": "pubmed.gov/..." }
-print(result.violations)        # claims with no source
-```
 
 ### Zero config
 
