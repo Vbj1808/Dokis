@@ -1,6 +1,7 @@
 <div align="center">
 
-![Dokis banner](assets/banner.svg)
+![Dokis banner](https://raw.githubusercontent.com/Vbj1808/dokis/main/assets/banner.svg)
+
 
 <br/>
 
@@ -39,7 +40,8 @@ No LLM call. No API key. No network request after startup. Deterministic output.
 
 <div align="center">
 
-![Dokis architecture](assets/diagram.jpeg)
+![Dokis architecture](https://raw.githubusercontent.com/Vbj1808/dokis/main/assets/diagram.jpeg)
+
 
 </div>
 
@@ -49,7 +51,7 @@ No LLM call. No API key. No network request after startup. Deterministic output.
 
 <div align="center">
 
-![Dokis CLI demo](assets/demo.gif)
+![Dokis CLI demo](https://raw.githubusercontent.com/Vbj1808/dokis/main/assets/demo.gif)
 
 </div>
 
