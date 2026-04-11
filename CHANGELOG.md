@@ -5,11 +5,67 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.1] - 2026-03-28
+## [0.1.2]
+
+### Added
+
+- **CLI trust report** - `dokis audit sample_audit.json` now renders a
+  screenshot-friendly terminal report that highlights:
+  - allowed vs blocked sources
+  - human-readable blocked-source reasons
+  - supported vs unsupported claim verdicts
+  - `policy_issues`
+  - `enforcement_mode` and `enforcement_verdict`
+  - final compliance status
+
+- **Structured trust result** - Dokis now returns a richer per-response
+  provenance report aimed at runtime trust enforcement, not only a compliance
+  score. `ProvenanceResult` now includes:
+  - `blocked_source_details` with structured `BlockedSource` entries
+  - `claim_verdicts` with compact per-claim reporting
+  - `policy_issues` summarising whether blocked sources and/or unsupported
+    claims were present
+  - `has_blocked_sources` and `has_unsupported_claims`
+  - `enforcement_mode`, `enforcement_verdict`, and `raised_on_violation`
+
+- **Explicit enforcement modes** - `Config` now supports
+  `enforcement_mode="audit" | "guardrail" | "enforce"`.
+  - `audit` always returns a result
+  - `guardrail` returns a result and marks trust failure in the result
+  - `enforce` fails closed by raising `ComplianceViolation`
+
+- **Structured blocked-source classification** - `DomainEnforcer.inspect()`
+  returns `BlockedSource` records with a `reason` field:
+  - `domain_not_allowlisted`
+  - `malformed_source_url`
+  - `missing_source_url`
+
+- **Top-level exports for new report models** - `dokis.BlockedSource` and
+  `dokis.ClaimVerdict` are now part of the public package surface.
+
+
+### Changed
+
+- **Legacy fail-closed config remains supported** - `fail_on_violation` is now
+  treated as a backwards-compatible alias for `enforcement_mode="enforce"`.
+  If both are provided, `enforcement_mode` wins.
+
+- **Async wrappers are documented honestly** - `aaudit()` and `afilter()`
+  remain awaitable wrappers around the synchronous pipeline. They are
+  convenient for async call sites, but they do not offload matching work from
+  the event loop.
+
+- **ComplianceViolation messaging** now includes both the final
+  `enforcement_verdict` and the compact `policy_issues` summary.
+
+- **README and example config** now reflect the modern `enforcement_mode`
+  interface and the richer result object.
 
 ### Fixed
-- Use absolute asset URLs for PyPI README rendering
-- Force Python badge cache refresh
+
+- **BM25 progress noise suppressed** - BM25 tokenization, indexing, and
+  retrieval now pass `show_progress=False` so runtime audits and tests stay
+  quiet by default.
 
 ## [0.1.0] - 2026-03-25
 

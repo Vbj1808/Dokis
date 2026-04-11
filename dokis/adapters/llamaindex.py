@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 try:
     from llama_index.core.base.base_query_engine import BaseQueryEngine
@@ -81,7 +80,7 @@ class ProvenanceQueryEngine:
             ``metadata["provenance"]`` populated as a
             :class:`~dokis.models.ProvenanceResult`.
         """
-        response: Any = self._base_engine.query(query)
+        response = self._base_engine.query(query)
         result = self._middleware.audit(
             query=query,
             chunks=self._chunks,

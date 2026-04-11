@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dokis"
-version = "0.1.1"
-description = "Lightweight RAG provenance middleware. Verifies every claim in an LLM response is grounded in a retrieved source - without an LLM call."
+version = "0.1.2"
+description = "Trust reporting and provenance enforcement for RAG pipelines. Audits claim grounding, source allowlists, and trust failures without an LLM call."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -40,6 +40,9 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
     "nltk>=3.8",
+    "langchain-core>=0.2",
+    "llama-index-core>=0.10",
+    # adapter packages included here so mypy/CI can type-check adapter modules
     # sentence-transformers intentionally excluded — install via [semantic]
     "tomli>=2.0; python_version < '3.11'",
 ]
@@ -49,6 +52,9 @@ Homepage = "https://github.com/Vbj1808/dokis"
 Repository = "https://github.com/Vbj1808/dokis"
 Issues = "https://github.com/Vbj1808/dokis/issues"
 Changelog = "https://github.com/Vbj1808/dokis/blob/main/CHANGELOG.md"
+
+[project.scripts]
+dokis = "dokis.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -79,6 +85,3 @@ markers = [
     "semantic: tests that require sentence-transformers (pip install dokis[semantic])",
 ]
 
-
-[project.scripts]
-dokis = "dokis.cli:main"

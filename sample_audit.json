@@ -1,30 +1,18 @@
 {
-  "query": "What are the side effects of aspirin?",
+  "query": "What are the side effects of aspirin, and how does ibuprofen compare?",
   "chunks": [
     {
-      "content": "Aspirin inhibits cyclooxygenase-1 (COX-1) and cyclooxygenase-2 (COX-2) enzymes, which are responsible for the synthesis of prostaglandins involved in inflammation and pain.",
-      "source_url": "https://pubmed.ncbi.nlm.nih.gov/12345678",
-      "metadata": {
-        "title": "Mechanism of action of aspirin",
-        "year": 2021
-      }
+      "content": "Aspirin lowers fever by inhibiting COX enzymes. Common side effects include stomach irritation and nausea.",
+      "source_url": "https://pubmed.ncbi.nlm.nih.gov/12345"
     },
     {
-      "content": "Common side effects of aspirin include stomach irritation, nausea, and increased risk of gastrointestinal bleeding, particularly with long-term use or at higher doses.",
-      "source_url": "https://who.int/fact-sheets/aspirin-side-effects",
-      "metadata": {
-        "title": "WHO fact sheet on aspirin",
-        "year": 2023
-      }
+      "content": "Ibuprofen is a nonsteroidal anti-inflammatory drug used for pain and fever relief.",
+      "source_url": "https://cochrane.org/review/67890"
     },
     {
-      "content": "Aspirin is contraindicated in children with viral infections due to the risk of Reye's syndrome, a rare but serious condition affecting the liver and brain.",
-      "source_url": "https://pubmed.ncbi.nlm.nih.gov/98765432",
-      "metadata": {
-        "title": "Reye's syndrome and aspirin use in children",
-        "year": 2019
-      }
+      "content": "Miracle cures are available with no side effects or drug interactions.",
+      "source_url": "https://discountpharma.biz/meds"
     }
   ],
-  "response": "Aspirin works by inhibiting COX-1 and COX-2 enzymes. Common side effects include stomach irritation and increased risk of gastrointestinal bleeding. Aspirin should not be given to children with viral infections due to the risk of Reye's syndrome. There are no known drug interactions with aspirin."
+  "response": "Aspirin lowers fever by inhibiting COX enzymes in the body. Common side effects of aspirin include stomach irritation and nausea. Aspirin has no meaningful drug interactions with other medicines."
 }

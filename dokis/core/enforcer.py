@@ -3,12 +3,21 @@
 from __future__ import annotations
 
 import logging
+import re
+from typing import Literal
 from urllib.parse import urlparse
 
 from dokis.config import Config
-from dokis.models import Chunk
+from dokis.models import BlockedSource, Chunk
 
 logger = logging.getLogger(__name__)
+_HOSTLIKE_PATTERN = re.compile(r"^[A-Za-z0-9.-]+(?::\d+)?$")
+
+BlockedReason = Literal[
+    "domain_not_allowlisted",
+    "malformed_source_url",
+    "missing_source_url",
+]
 
 
 def _safe_log_url(url: str) -> str:
@@ -43,6 +52,44 @@ class DomainEnforcer:
     def __init__(self, config: Config) -> None:
         self._config = config
 
+    def inspect(
+        self, chunks: list[Chunk]
+    ) -> tuple[list[Chunk], list[BlockedSource]]:
+        """Filter chunks and return structured blocked-source details."""
+        if not self._config.allowed_domains:
+            return list(chunks), []
+
+        clean: list[Chunk] = []
+        blocked: list[BlockedSource] = []
+
+        for chunk in chunks:
+            host, reason = self._classify_source_url(chunk.source_url)
+            if host is None:
+                logger.warning(
+                    "Dokis: blocked source_url with reason=%s (host: %r).",
+                    reason or "malformed_source_url",
+                    _safe_log_url(chunk.source_url),
+                )
+                blocked.append(
+                    BlockedSource(
+                        url=chunk.source_url,
+                        domain=None,
+                        reason=reason or "malformed_source_url",
+                    )
+                )
+            elif host in self._config.allowed_domains:
+                clean.append(chunk)
+            else:
+                blocked.append(
+                    BlockedSource(
+                        url=chunk.source_url,
+                        domain=host,
+                        reason="domain_not_allowlisted",
+                    )
+                )
+
+        return clean, blocked
+
     def filter(
         self, chunks: list[Chunk]
     ) -> tuple[list[Chunk], list[str]]:
@@ -62,47 +109,41 @@ class DomainEnforcer:
             ``clean_chunks`` is the filtered list and ``blocked_urls``
             contains every source URL that was removed.
         """
-        if not self._config.allowed_domains:
-            return list(chunks), []
-
-        clean: list[Chunk] = []
-        blocked: list[str] = []
-
-        for chunk in chunks:
-            host = self._extract_host(chunk.source_url)
-            if host is None:
-                # Malformed URL - treat as blocked.
-                logger.warning(
-                    "Dokis: malformed source_url (host: %r) - treating as blocked.",
-                    _safe_log_url(chunk.source_url),
-                )
-                blocked.append(chunk.source_url)
-            elif host in self._config.allowed_domains:
-                clean.append(chunk)
-            else:
-                blocked.append(chunk.source_url)
-
-        return clean, blocked
+        clean, blocked = self.inspect(chunks)
+        return clean, [entry.url for entry in blocked]
 
     @staticmethod
-    def _extract_host(url: str) -> str | None:
-        """Parse a URL and return its hostname with ``www.`` stripped.
+    def _classify_source_url(
+        url: str,
+    ) -> tuple[str | None, BlockedReason | None]:
+        """Parse a source URL and classify why it should be blocked.
 
         Args:
             url: The raw source URL string.
 
         Returns:
-            The normalised hostname, or ``None`` if the URL cannot be parsed
-            to a non-empty hostname.
+            A two-tuple of ``(normalised_host, blocked_reason)``.
+            ``blocked_reason`` is ``None`` only when a host was extracted.
         """
         try:
+            if not url.strip():
+                return None, "missing_source_url"
             parsed = urlparse(url)
+            host = parsed.hostname
+            if host:
+                if host.startswith("www."):
+                    host = host[4:]
+                return host, None
+
+            bare_host = url.split("/", 1)[0]
+            if _HOSTLIKE_PATTERN.fullmatch(bare_host):
+                if bare_host.startswith("www."):
+                    bare_host = bare_host[4:]
+                return bare_host, None
+
             host = parsed.netloc or parsed.path
             if not host:
-                return None
-            # Strip www. prefix to match the normalised allowlist entries.
-            if host.startswith("www."):
-                host = host[4:]
-            return host
+                return None, "missing_source_url"
+            return None, "malformed_source_url"
         except Exception:  # noqa: BLE001 - urlparse rarely raises; catch all to honour "never raise"
-            return None
+            return None, "malformed_source_url"

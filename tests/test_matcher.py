@@ -1,5 +1,6 @@
 """Full test suite for ClaimMatcher."""
 
+import numpy as np
 import pytest
 
 from dokis.config import Config
@@ -13,7 +14,41 @@ from dokis.models import Chunk
 
 
 @pytest.fixture
-def semantic_matcher() -> ClaimMatcher:
+def fake_semantic_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import dokis.core.matcher as matcher_module
+
+    class _FakeSentenceTransformer:
+        def __init__(self, model_name: str) -> None:  # noqa: ARG002
+            pass
+
+        def encode(self, texts: list[str], convert_to_numpy: bool = True) -> np.ndarray:  # noqa: ARG002
+            vectors: list[np.ndarray] = []
+            for text in texts:
+                lower = text.lower()
+                token_count = max(len(lower.split()), 1)
+                vectors.append(
+                    np.array(
+                        [
+                            1.0 if "aspirin" in lower or "cox" in lower or "fever" in lower else 0.1,
+                            1.0 if "ibuprofen" in lower or "anti-inflammatory" in lower else 0.1,
+                            min(token_count / 20.0, 1.0),
+                        ],
+                        dtype=np.float64,
+                    )
+                )
+            return np.array(vectors, dtype=np.float64)
+
+    monkeypatch.setattr(
+        matcher_module,
+        "_get_sentence_transformer_class",
+        lambda: _FakeSentenceTransformer,
+    )
+
+
+@pytest.fixture
+def semantic_matcher(fake_semantic_model: None) -> ClaimMatcher:
     return ClaimMatcher(Config(matcher="semantic", claim_threshold=0.72))
 
 
@@ -55,7 +90,9 @@ def test_matcher_returns_supported_true_above_threshold(
 
 @pytest.mark.semantic
 def test_matcher_returns_supported_false_below_threshold(
-    aspirin_chunk: Chunk, ibuprofen_chunk: Chunk
+    fake_semantic_model: None,
+    aspirin_chunk: Chunk,
+    ibuprofen_chunk: Chunk,
 ) -> None:
     # threshold=1.0 means nothing can match.
     config = Config(matcher="semantic", claim_threshold=1.0)
@@ -66,8 +103,10 @@ def test_matcher_returns_supported_false_below_threshold(
     assert results[0].supported is False
 
 
-@pytest.mark.semantic
-def test_matcher_confidence_always_populated(aspirin_chunk: Chunk) -> None:
+def test_matcher_confidence_always_populated(
+    fake_semantic_model: None,
+    aspirin_chunk: Chunk,
+) -> None:
     config = Config(matcher="semantic", claim_threshold=1.0)
     strict_matcher = ClaimMatcher(config)
     claims = ["Aspirin inhibits the COX enzymes and reduces fever."]
@@ -88,8 +127,10 @@ def test_matcher_source_url_populated_on_supported_claim(
     assert results[0].source_chunk == aspirin_chunk
 
 
-@pytest.mark.semantic
-def test_matcher_source_url_none_on_unsupported_claim(aspirin_chunk: Chunk) -> None:
+def test_matcher_source_url_none_on_unsupported_claim(
+    fake_semantic_model: None,
+    aspirin_chunk: Chunk,
+) -> None:
     config = Config(matcher="semantic", claim_threshold=1.0)
     strict_matcher = ClaimMatcher(config)
     claims = ["Aspirin inhibits the COX enzymes and reduces fever."]
@@ -251,7 +292,11 @@ def test_semantic_matcher_raises_import_error_without_package(
     """ClaimMatcher(matcher='semantic') must raise ImportError when sentence-transformers is absent."""
     import dokis.core.matcher as matcher_module
 
-    monkeypatch.setattr(matcher_module, "_SEMANTIC_AVAILABLE", False)
+    monkeypatch.setattr(
+        matcher_module,
+        "_get_sentence_transformer_class",
+        lambda: None,
+    )
     with pytest.raises(ImportError, match="sentence-transformers"):
         ClaimMatcher(Config(matcher="semantic"))
 

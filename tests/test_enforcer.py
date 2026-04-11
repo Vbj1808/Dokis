@@ -48,6 +48,37 @@ def test_enforcer_handles_malformed_url_without_raising(
     assert ":::not::a::url:::" in blocked
 
 
+def test_enforcer_reports_blocked_reason_for_unallowlisted_domain(
+    strict_config: Config,
+) -> None:
+    enforcer = DomainEnforcer(strict_config)
+    _, blocked = enforcer.inspect(
+        [Chunk(content="text", source_url="https://discountpharma.biz/meds")]
+    )
+    assert blocked[0].reason == "domain_not_allowlisted"
+    assert blocked[0].domain == "discountpharma.biz"
+
+
+def test_enforcer_reports_blocked_reason_for_malformed_url(
+    strict_config: Config,
+) -> None:
+    enforcer = DomainEnforcer(strict_config)
+    _, blocked = enforcer.inspect(
+        [Chunk(content="text", source_url=":::not::a::url:::")]
+    )
+    assert blocked[0].reason == "malformed_source_url"
+    assert blocked[0].domain is None
+
+
+def test_enforcer_reports_blocked_reason_for_missing_url(
+    strict_config: Config,
+) -> None:
+    enforcer = DomainEnforcer(strict_config)
+    _, blocked = enforcer.inspect([Chunk(content="text", source_url="")])
+    assert blocked[0].reason == "missing_source_url"
+    assert blocked[0].domain is None
+
+
 def test_enforcer_strips_www_prefix(strict_config: Config) -> None:
     # www.pubmed.ncbi.nlm.nih.gov should match the allowlist entry
     # pubmed.ncbi.nlm.nih.gov (which has www. stripped at Config ingestion).

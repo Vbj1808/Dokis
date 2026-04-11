@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 try:
     from langchain_core.callbacks import CallbackManagerForRetrieverRun
@@ -20,8 +20,8 @@ from dokis.models import Chunk
 
 logger = logging.getLogger(__name__)
 
-
-class ProvenanceRetriever(BaseRetriever):  # type: ignore[misc]
+ 
+class ProvenanceRetriever(BaseRetriever): 
     """LangChain retriever that enforces source provenance via DomainEnforcer.
 
     Wraps any existing LangChain ``BaseRetriever`` and filters its results
@@ -60,7 +60,8 @@ class ProvenanceRetriever(BaseRetriever):  # type: ignore[misc]
         url_metadata_key: str = "source",
         **kwargs: Any,
     ) -> None:
-        super().__init__(
+        super_init = cast(Any, super().__init__)
+        super_init(
             base_retriever=base_retriever,
             config=config or Config(),
             url_metadata_key=url_metadata_key,
