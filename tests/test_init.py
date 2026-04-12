@@ -58,7 +58,7 @@ def test_cache_is_safe_after_config_gc(
 
     monkeypatch.setattr(dokis, "_middleware_cache", {})
 
-    config_a = dokis.Config(min_citation_rate=0.0, matcher="semantic")
+    config_a = dokis.Config(min_citation_rate=0.0, matcher="bm25")
     dokis.audit("q", sample_chunks, grounded_response, config=config_a)
 
     # Delete config_a and force GC to potentially reuse its memory.
@@ -66,7 +66,7 @@ def test_cache_is_safe_after_config_gc(
     gc.collect()
 
     # Create a new config — may or may not share id with deleted config_a.
-    config_b = dokis.Config(min_citation_rate=1.0, matcher="semantic")
+    config_b = dokis.Config(min_citation_rate=1.0, matcher="bm25")
     result = dokis.audit("q", sample_chunks, grounded_response, config=config_b)
 
     # Must use config_b's min_citation_rate=1.0, not config_a's 0.0.
@@ -82,7 +82,7 @@ def test_same_config_object_reuses_cached_middleware(
     """The same Config instance must return the same middleware object."""
     monkeypatch.setattr(dokis, "_middleware_cache", {})
 
-    config = dokis.Config(min_citation_rate=0.0, matcher="semantic")
+    config = dokis.Config(min_citation_rate=0.0, matcher="bm25")
     dokis.audit("q", sample_chunks, grounded_response, config=config)
     dokis.audit("q", sample_chunks, grounded_response, config=config)
 
@@ -100,7 +100,7 @@ def test_module_level_audit_reuses_middleware_for_same_config(
     """Two audit() calls with the same Config instance must not reload the model."""
     monkeypatch.setattr(dokis, "_middleware_cache", {})
 
-    config = dokis.Config(min_citation_rate=0.0, matcher="semantic")
+    config = dokis.Config(min_citation_rate=0.0, matcher="bm25")
     dokis.configure(config)
 
     original_init = dokis.ProvenanceMiddleware.__init__

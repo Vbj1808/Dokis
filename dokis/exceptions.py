@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 
 class ComplianceViolation(Exception):
-    """Raised when a provenance audit fails and ``fail_on_violation`` is enabled.
+    """Raised when a provenance audit fails in ``enforce`` mode.
 
     Always carries the full :class:`~dokis.models.ProvenanceResult` so callers
     can inspect exactly which claims were unsupported.
@@ -23,7 +23,9 @@ class ComplianceViolation(Exception):
         super().__init__(
             f"Dokis compliance check failed: {result.compliance_rate:.1%} grounded "
             f"(minimum required: {result.min_citation_rate:.1%}). "
-            f"{len(result.violations)} unsupported claim(s)."
+            f"{len(result.violations)} unsupported claim(s). "
+            f"Enforcement verdict: {result.enforcement_verdict}. "
+            f"Policy issues: {', '.join(result.policy_issues) or 'none'}."
         )
 
 

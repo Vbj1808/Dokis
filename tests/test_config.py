@@ -24,3 +24,27 @@ def test_config_from_yaml_loads_toml(tmp_path: Path) -> None:
     config = Config.from_yaml(f)
     assert config.min_citation_rate == pytest.approx(0.90)
     assert config.claim_threshold == pytest.approx(0.65)
+
+
+def test_fail_on_violation_maps_to_enforce_mode() -> None:
+    """Legacy fail_on_violation=True must still enable fail-closed behavior."""
+    config = Config(fail_on_violation=True)
+    assert config.enforcement_mode == "enforce"
+    assert config.fail_on_violation is True
+
+
+def test_config_defaults_to_guardrail_mode() -> None:
+    """Zero-config usage should prefer the modern non-raising guardrail mode."""
+    config = Config()
+    assert config.enforcement_mode == "guardrail"
+    assert config.fail_on_violation is False
+
+
+def test_enforcement_mode_overrides_legacy_fail_on_violation() -> None:
+    """Explicit enforcement_mode wins when both old and new settings exist."""
+    config = Config(
+        enforcement_mode="audit",
+        fail_on_violation=True,
+    )
+    assert config.enforcement_mode == "audit"
+    assert config.fail_on_violation is False

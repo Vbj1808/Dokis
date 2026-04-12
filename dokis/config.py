@@ -53,16 +53,21 @@ class Config(BaseModel):
             ``"semantic"`` uses SentenceTransformer dense cosine similarity
             (requires ``pip install dokis[semantic]``).
         model: SentenceTransformer model name used when ``matcher="semantic"``.
-        fail_on_violation: If ``True``, audit raises
-            :class:`~dokis.exceptions.ComplianceViolation` when the result
-            does not pass. Defaults to ``False``.
+        enforcement_mode: Runtime behavior when provenance policy fails.
+            ``"audit"`` always returns a result and never raises.
+            ``"guardrail"`` returns a result and marks policy failure in the
+            result. ``"enforce"`` fails closed by raising
+            :class:`~dokis.exceptions.ComplianceViolation`.
+        fail_on_violation: Backwards-compatible alias for enforce mode. Kept
+            for existing configs and examples. If both settings are present,
+            ``enforcement_mode`` takes precedence.
         domain: Optional label for the knowledge domain (e.g. ``"oncology"``).
             Carried through to :class:`~dokis.models.ProvenanceResult` for
             downstream use.
         llm_fn: User-supplied callable used when ``extractor="llm"``. Must
             accept a prompt string and return the extracted claims as a
-            newline-separated string. Ignored when
-            ``extractor="sentence_transformers"``.
+            newline-separated string. Ignored unless
+            ``extractor="llm"``.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -73,6 +78,7 @@ class Config(BaseModel):
     extractor: Literal["regex", "nltk", "llm"] = "regex"
     matcher: Literal["bm25", "semantic"] = "bm25"
     model: str = "all-MiniLM-L6-v2"
+    enforcement_mode: Literal["audit", "guardrail", "enforce"] | None = None
     fail_on_violation: bool = False
     domain: str | None = None
     llm_fn: Callable[[str], str] | None = Field(default=None, exclude=True)
@@ -90,6 +96,16 @@ class Config(BaseModel):
         self.allowed_domains = [
             _strip_www_prefix(d) for d in self.allowed_domains
         ]
+        return self
+
+    @model_validator(mode="after")
+    def _resolve_enforcement_mode(self) -> Self:
+        """Keep the new enforcement mode and legacy bool in sync."""
+        if self.enforcement_mode is None:
+            self.enforcement_mode = (
+                "enforce" if self.fail_on_violation else "guardrail"
+            )
+        self.fail_on_violation = self.enforcement_mode == "enforce"
         return self
 
     @classmethod

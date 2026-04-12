@@ -24,19 +24,19 @@ Existing tools don't solve this at runtime:
 - **LLM guardrails** handle safety and policy enforcement well - toxicity, jailbreaks, off-topic content. Their provenance validators strip unsupported sentences but don't return a structured claim→URL map, a compliance rate, or a source allowlist.
 - **Prompt engineering** reduces the problem. It doesn't eliminate it.
 
-Dokis sits inline - between your retriever and your LLM response going out - and enforces provenance in real time.
+Dokis sits inline between retrieval and response delivery and returns a runtime trust report for the exact answer your system is about to ship. It acts as a provenance and enforcement boundary in real time.
 
 ---
 
 ## How it works
 
-Dokis does exactly two things:
+Dokis does two things in one deterministic runtime pass:
 
 **1. Pre-retrieval enforcement.** Strip chunks whose source URL is not on your allowlist before they enter the prompt.
 
-**2. Post-generation auditing.** Split the response into atomic claim sentences. Match each claim to the chunk it came from using BM25 lexical scoring. Build a `claim → chunk → URL` provenance map. Compute a compliance rate. Flag anything below your threshold.
+**2. Post-generation auditing.** Split the response into atomic claim sentences. Match each claim to the best supporting chunk using BM25 lexical scoring by default. Build a `claim → chunk → URL` provenance map. Compute a compliance rate. Return blocked-source details, claim-level verdicts, policy issues, and a final enforcement verdict.
 
-No LLM call. No API key. No network request after startup. Deterministic output.
+No LLM call or API key is required for the default BM25 path. Output is deterministic for identical inputs and config.
 
 <div align="center">
 
@@ -51,7 +51,7 @@ No LLM call. No API key. No network request after startup. Deterministic output.
 
 <div align="center">
 
-![Dokis CLI demo](https://raw.githubusercontent.com/Vbj1808/dokis/main/assets/demo.gif)
+![Dokis CLI demo](https://raw.githubusercontent.com/Vbj1808/dokis/main/assets/demo.png)
 
 </div>
 
@@ -70,7 +70,25 @@ print(result.compliance_rate)   # 0.91
 print(result.passed)            # True
 print(result.provenance_map)    # {"Aspirin inhibits...": "https://pubmed.com/1"}
 print(result.violations)        # claims with no source
+print(result.claim_verdicts)    # explicit supported / unsupported report
+print(result.policy_issues)     # [] | ["blocked_sources"] | ...
+print(result.enforcement_mode)  # "guardrail"
+print(result.enforcement_verdict)  # "passed"
 ```
+
+### CLI trust report
+
+```bash
+dokis audit sample_audit.json
+```
+
+The CLI reads a JSON file containing `query`, `chunks`, and `response`. If a
+`provenance.toml` file is present in the current directory or beside the input
+file, Dokis loads it automatically so the report reflects your real allowlist,
+threshold, matcher, and enforcement mode. Use `--config path/to/file.toml` to
+override that discovery. Use `--no-color` for plain output. Exit code is `0`
+when the audit passes, `1` when it fails policy/compliance checks, and `2`
+for CLI/input errors.
 
 ### With config
 
@@ -81,6 +99,7 @@ config = dokis.Config(
     allowed_domains   = ["pubmed.ncbi.nlm.nih.gov", "cochrane.org"],
     min_citation_rate = 0.85,
     claim_threshold   = 0.3,
+    enforcement_mode  = "guardrail",
 )
 
 clean_chunks = dokis.filter(raw_chunks, config)
@@ -122,8 +141,9 @@ result   = response.metadata["provenance"]
 ```bash
 dokis audit input.json
 dokis audit input.json --config provenance.toml
-cat input.json | dokis audit -
 ```
+
+`dokis audit` currently expects a file path. Stdin piping is not supported.
 
 ### Reusable middleware (production pattern)
 
@@ -135,6 +155,7 @@ mw = ProvenanceMiddleware(Config(
     min_citation_rate = 0.85,
     matcher           = "bm25",
     claim_threshold   = 0.3,
+    enforcement_mode  = "guardrail",
 ))
 
 result = mw.audit(query, chunks, response)
@@ -170,10 +191,14 @@ dokis.Config(
     extractor         = "regex",        # "regex" | "nltk" | "llm"
     matcher           = "bm25",         # "bm25" | "semantic"
     model             = "all-MiniLM-L6-v2",
-    fail_on_violation = False,
+    enforcement_mode  = "guardrail",    # "audit" | "guardrail" | "enforce"
     domain            = None,
 )
 ```
+
+`fail_on_violation` still works as a backwards-compatible alias for
+`enforcement_mode="enforce"`, but `enforcement_mode` is the recommended
+interface for new configs and examples.
 
 **`claim_threshold` by matcher:**
 - `matcher="bm25"`: normalised per-query BM25 score. Recommended: `0.3–0.5`.
@@ -193,10 +218,18 @@ config = dokis.Config.from_yaml("provenance.toml")
 ```python
 result.compliance_rate   # float
 result.passed            # bool
-result.violations        # list[Claim]
-result.provenance_map    # dict[claim_text, source_url]
-result.blocked_sources   # list[str]
-result.claims            # list[Claim]
+result.violations        # list[Claim] (derived unsupported claims)
+result.provenance_map    # dict[claim_text, source_url] (derived supported claims)
+result.blocked_sources   # list[str] (backwards-compatible)
+result.blocked_source_details  # list[BlockedSource]
+result.claim_verdicts    # list[ClaimVerdict]
+result.policy_issues     # ["blocked_sources", "unsupported_claims"]
+result.has_blocked_sources     # bool
+result.has_unsupported_claims  # bool
+result.enforcement_mode        # "audit" | "guardrail" | "enforce"
+result.enforcement_verdict     # "passed" | "..._failed" | "enforce_raised"
+result.raised_on_violation     # bool
+result.claims            # list[Claim] (full per-claim audit records)
 
 claim.text               # str
 claim.supported          # bool
@@ -204,7 +237,17 @@ claim.confidence         # float - always set, even when False
 claim.source_url         # str | None
 claim.source_chunk       # Chunk | None
 
-record = result.model_dump_json()  # fully JSON-serialisable
+blocked.url              # str
+blocked.domain           # str | None
+blocked.reason           # "domain_not_allowlisted" | "malformed_source_url" | "missing_source_url"
+
+verdict.claim_text       # str
+verdict.verdict          # "supported" | "unsupported"
+verdict.confidence       # float
+verdict.supporting_url   # str | None
+verdict.note             # str | None
+
+record = result.model_dump_json()  # fully JSON-serialisable trust report
 ```
 
 ---

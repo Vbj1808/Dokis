@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
-import functools
-from typing import cast
+from typing import Literal
 
 from dokis.config import Config
 from dokis.core.enforcer import DomainEnforcer
@@ -12,7 +10,13 @@ from dokis.core.extractor import ClaimExtractor
 from dokis.core.matcher import ClaimMatcher
 from dokis.core.scorer import ComplianceScorer
 from dokis.exceptions import ComplianceViolation
-from dokis.models import Chunk, ProvenanceResult
+from dokis.models import (
+    BlockedSource,
+    Chunk,
+    Claim,
+    ClaimVerdict,
+    ProvenanceResult,
+)
 
 
 class ProvenanceMiddleware:
@@ -31,7 +35,7 @@ class ProvenanceMiddleware:
 
         from dokis import ProvenanceMiddleware, Config
 
-        pg = ProvenanceMiddleware(Config.from_yaml("provenance.yaml"))
+        pg = ProvenanceMiddleware(Config.from_yaml("provenance.toml"))
         chunks   = pg.filter(retriever.get_relevant_documents(query))
         response = llm.invoke(build_prompt(query, chunks))
         result   = pg.audit(query, chunks, response)
@@ -78,7 +82,7 @@ class ProvenanceMiddleware:
            record ``blocked_sources``.
         2. **Extractor** - split ``response`` into atomic claim sentences.
         3. **Matcher** - match each claim to its best-supporting chunk via
-           cosine similarity.
+           the configured matcher.
         4. **Scorer** - compute the overall ``compliance_rate`` and
            ``passed`` verdict.
 
@@ -96,15 +100,16 @@ class ProvenanceMiddleware:
 
         Returns:
             A :class:`~dokis.models.ProvenanceResult` with per-claim
-            grounding information, compliance rate, and blocked source URLs.
+            grounding information, blocked-source reporting, policy issues,
+            and enforcement metadata.
 
         Raises:
             :class:`~dokis.exceptions.ComplianceViolation`: When
-                ``config.fail_on_violation=True`` and the result does not
+                ``config.enforcement_mode="enforce"`` and the result does not
                 pass. The exception always carries the full result.
         """
         # 1. Enforce domain allowlist.
-        clean_chunks, blocked_sources = self.enforcer.filter(chunks)
+        clean_chunks, blocked_source_details = self.enforcer.inspect(chunks)
 
         # 2. Extract atomic claims from the response.
         claim_texts = self.extractor.extract(response)
@@ -120,21 +125,78 @@ class ProvenanceMiddleware:
             claims=claims,
             compliance_rate=compliance_rate,
             passed=passed,
-            blocked_sources=blocked_sources,
+            blocked_sources=[entry.url for entry in blocked_source_details],
+            blocked_source_details=blocked_source_details,
+            claim_verdicts=self._build_claim_verdicts(claims),
+            policy_issues=self._build_policy_issues(
+                blocked_source_details=blocked_source_details,
+                claims=claims,
+            ),
+            has_blocked_sources=bool(blocked_source_details),
+            has_unsupported_claims=any(not claim.supported for claim in claims),
             domain=self.config.domain,
             min_citation_rate=self.config.min_citation_rate,
+            enforcement_mode=self.config.enforcement_mode or "guardrail",
+            enforcement_verdict=self._resolve_enforcement_verdict(passed),
         )
 
-        if self.config.fail_on_violation and not result.passed:
+        if self.config.enforcement_mode == "enforce" and not result.passed:
+            result.raised_on_violation = True
+            result.enforcement_verdict = "enforce_raised"
             raise ComplianceViolation(result)
 
         return result
 
+    def _build_claim_verdicts(self, claims: list[Claim]) -> list[ClaimVerdict]:
+        """Return a compact, report-oriented view of claim support status."""
+        verdicts: list[ClaimVerdict] = []
+        for claim in claims:
+            supported = claim.supported and claim.source_url is not None
+            verdicts.append(
+                ClaimVerdict(
+                    claim_text=claim.text,
+                    verdict="supported" if supported else "unsupported",
+                    confidence=claim.confidence,
+                    supporting_url=claim.source_url if supported else None,
+                    note=(
+                        None
+                        if supported
+                        else "No supporting source met the configured threshold."
+                    ),
+                )
+            )
+        return verdicts
+
+    def _build_policy_issues(
+        self,
+        *,
+        blocked_source_details: list[BlockedSource],
+        claims: list[Claim],
+    ) -> list[Literal["blocked_sources", "unsupported_claims"]]:
+        """Return a compact structured summary of audit-level policy issues."""
+        issues: list[Literal["blocked_sources", "unsupported_claims"]] = []
+        if blocked_source_details:
+            issues.append("blocked_sources")
+        if any(not claim.supported for claim in claims):
+            issues.append("unsupported_claims")
+        return issues
+
+    def _resolve_enforcement_verdict(
+        self,
+        passed: bool,
+    ) -> Literal["passed", "audit_failed", "guardrail_failed"]:
+        """Return a single explicit enforcement outcome for the audit."""
+        if passed:
+            return "passed"
+        if self.config.enforcement_mode == "audit":
+            return "audit_failed"
+        return "guardrail_failed"
+
     async def afilter(self, chunks: list[Chunk]) -> list[Chunk]:
         """Async version of :meth:`filter`.
 
-        Runs :meth:`filter` in a thread-pool executor so the event loop
-        is not blocked by I/O or CPU work inside the enforcer.
+        Provides an awaitable wrapper for async call sites while reusing the
+        synchronous enforcement path.
 
         Args:
             chunks: Raw chunks from your retriever.
@@ -142,11 +204,7 @@ class ProvenanceMiddleware:
         Returns:
             Chunks whose source domain is in ``config.allowed_domains``.
         """
-        loop = asyncio.get_running_loop()
-        return cast(
-            list[Chunk],
-            await loop.run_in_executor(None, self.filter, chunks),
-        )
+        return self.filter(chunks)
 
     async def aaudit(
         self,
@@ -156,11 +214,8 @@ class ProvenanceMiddleware:
     ) -> ProvenanceResult:
         """Async version of :meth:`audit`.
 
-        Runs the full synchronous pipeline in a thread-pool executor so
-        CPU-bound embedding work does not block the event loop.
-
-        The result is identical to what :meth:`audit` would return for
-        the same arguments.
+        Provides an awaitable wrapper for async call sites. The result is
+        identical to what :meth:`audit` would return for the same arguments.
 
         Args:
             query: The original user query.
@@ -173,14 +228,7 @@ class ProvenanceMiddleware:
 
         Raises:
             :class:`~dokis.exceptions.ComplianceViolation`: When
-                ``config.fail_on_violation=True`` and the result does not
+                ``config.enforcement_mode="enforce"`` and the result does not
                 pass.
         """
-        loop = asyncio.get_running_loop()
-        return cast(
-            ProvenanceResult,
-            await loop.run_in_executor(
-                None,
-                functools.partial(self.audit, query, chunks, response),
-            ),
-        )
+        return self.audit(query, chunks, response)

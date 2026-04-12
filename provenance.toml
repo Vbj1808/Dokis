@@ -13,5 +13,6 @@ claim_threshold   = 0.30
 extractor         = "regex"
 matcher           = "bm25"
 model             = "all-MiniLM-L6-v2"
-fail_on_violation = false
+enforcement_mode  = "guardrail"
+# fail_on_violation = false  # legacy alias for enforcement_mode="enforce"
 domain            = "oncology"

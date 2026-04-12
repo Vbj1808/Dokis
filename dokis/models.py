@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -45,6 +45,28 @@ class Claim(BaseModel):
     source_url: str | None
 
 
+class BlockedSource(BaseModel):
+    """Structured details for a source blocked by domain enforcement."""
+
+    url: str
+    domain: str | None = None
+    reason: Literal[
+        "domain_not_allowlisted",
+        "malformed_source_url",
+        "missing_source_url",
+    ]
+
+
+class ClaimVerdict(BaseModel):
+    """Report-friendly summary of a claim-level provenance decision."""
+
+    claim_text: str
+    verdict: Literal["supported", "unsupported"]
+    confidence: float
+    supporting_url: str | None = None
+    note: str | None = None
+
+
 class ProvenanceResult(BaseModel):
     """The outcome of a full provenance audit.
 
@@ -57,11 +79,24 @@ class ProvenanceResult(BaseModel):
             there are no claims.
         passed: ``True`` when ``compliance_rate >= min_citation_rate``.
         blocked_sources: URLs that were removed by the domain enforcer before
-            the chunks reached the LLM.
+            the chunks reached the LLM. Preserved for backwards compatibility.
+        blocked_source_details: Structured blocked-source records including
+            URL, normalised domain, and block reason.
+        claim_verdicts: Report-oriented claim-level decisions with explicit
+            support verdicts and supporting URLs.
+        policy_issues: Compact structured summary of whether blocked sources
+            and/or unsupported claims were present in this audit result.
+        has_blocked_sources: ``True`` when any source was blocked by policy.
+        has_unsupported_claims: ``True`` when any extracted claim is
+            unsupported by the filtered chunk set.
         domain: Optional domain label from the config (e.g. ``"oncology"``).
         min_citation_rate: The threshold used to compute ``passed``. Stored
             here so callers and exceptions can inspect it without needing the
             originating :class:`~dokis.config.Config` object.
+        enforcement_mode: Configured runtime behavior for policy failure.
+        enforcement_verdict: Final report-level enforcement outcome.
+        raised_on_violation: ``True`` when the audit failed in enforce mode
+            and the result was attached to a raised ComplianceViolation.
     """
 
     response: str
@@ -69,8 +104,23 @@ class ProvenanceResult(BaseModel):
     compliance_rate: float
     passed: bool
     blocked_sources: list[str]
+    blocked_source_details: list[BlockedSource] = Field(default_factory=list)
+    claim_verdicts: list[ClaimVerdict] = Field(default_factory=list)
+    policy_issues: list[Literal["blocked_sources", "unsupported_claims"]] = (
+        Field(default_factory=list)
+    )
+    has_blocked_sources: bool = False
+    has_unsupported_claims: bool = False
     domain: str | None
     min_citation_rate: float
+    enforcement_mode: Literal["audit", "guardrail", "enforce"] = "guardrail"
+    enforcement_verdict: Literal[
+        "passed",
+        "audit_failed",
+        "guardrail_failed",
+        "enforce_raised",
+    ] = "passed"
+    raised_on_violation: bool = False
 
     @property
     def violations(self) -> list[Claim]:

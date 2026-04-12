@@ -9,11 +9,8 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-try:
-    from sentence_transformers import SentenceTransformer
-    _SEMANTIC_AVAILABLE: bool = True
-except ImportError:
-    _SEMANTIC_AVAILABLE = False
+from dokis.config import Config
+from dokis.models import Chunk, Claim
 
 try:
     import bm25s
@@ -21,10 +18,16 @@ try:
 except ImportError:
     _BM25_AVAILABLE = False
 
-from dokis.config import Config
-from dokis.models import Chunk, Claim
 
 logger = logging.getLogger(__name__)
+
+def _get_sentence_transformer_class() -> Any | None:
+    try:
+        from sentence_transformers import SentenceTransformer
+    except ImportError:
+        return None
+    return SentenceTransformer
+
 
 # Upper bounds on input sizes to prevent large matrix allocations from
 # exhausting memory. Configurable via environment variables for power users.
@@ -95,12 +98,13 @@ class ClaimMatcher:
         self._bm25_cache: dict[frozenset[str], Any] = {}
 
         if config.matcher == "semantic":
-            if not _SEMANTIC_AVAILABLE:
+            sentence_transformer_cls = _get_sentence_transformer_class()
+            if sentence_transformer_cls is None:
                 raise ImportError(
                     "matcher='semantic' requires sentence-transformers. "
                     "Install it with: pip install dokis[semantic]"
                 )
-            self._model = SentenceTransformer(config.model)
+            self._model = sentence_transformer_cls(config.model)
         elif config.matcher == "bm25":
             if not _BM25_AVAILABLE:
                 raise ImportError(
@@ -174,9 +178,13 @@ class ClaimMatcher:
                 # Evict the oldest entry (insertion-order dict, Python 3.7+).
                 oldest = next(iter(self._bm25_cache))
                 del self._bm25_cache[oldest]
-            corpus_tokens = bm25s.tokenize(chunk_texts, stopwords="en")
+            corpus_tokens = bm25s.tokenize(
+                chunk_texts,
+                stopwords="en",
+                show_progress=False,
+            )
             retriever = bm25s.BM25()
-            retriever.index(corpus_tokens)
+            retriever.index(corpus_tokens, show_progress=False)
             self._bm25_cache[cache_key] = retriever
         return self._bm25_cache[cache_key]
 
@@ -205,12 +213,18 @@ class ClaimMatcher:
         threshold = self._config.claim_threshold
 
         for claim_text in claims:
-            query_tokens = bm25s.tokenize(claim_text, stopwords="en")
+            query_tokens = bm25s.tokenize(
+                claim_text,
+                stopwords="en",
+                show_progress=False,
+            )
             # Retrieve all chunks ranked by score (descending).
             # doc_indices[0]: original corpus indices in ranked order.
             # scores[0]: corresponding BM25 scores.
             doc_indices, scores = retriever.retrieve(
-                query_tokens, k=len(chunks)
+                query_tokens,
+                k=len(chunks),
+                show_progress=False,
             )
             scores_1d: npt.NDArray[np.float64] = np.asarray(scores[0], dtype=np.float64)
             indices_1d: npt.NDArray[np.int64] = np.asarray(

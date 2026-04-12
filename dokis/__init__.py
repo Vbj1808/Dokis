@@ -11,7 +11,7 @@ Usage::
     result = dokis.audit(query, chunks, response)
 
     # With config
-    config = dokis.Config.from_yaml("provenance.yaml")
+    config = dokis.Config.from_yaml("provenance.toml")
     clean_chunks = dokis.filter(raw_chunks, config)
     result = dokis.audit(query, clean_chunks, response, config=config)
 
@@ -26,7 +26,13 @@ import threading
 from dokis.config import Config
 from dokis.exceptions import ComplianceViolation, DomainViolation
 from dokis.middleware import ProvenanceMiddleware
-from dokis.models import Chunk, Claim, ProvenanceResult
+from dokis.models import (
+    BlockedSource,
+    Chunk,
+    Claim,
+    ClaimVerdict,
+    ProvenanceResult,
+)
 
 # Module-level default configuration set via configure().
 _default_config: Config | None = None
@@ -160,6 +166,8 @@ __all__ = [
     "Config",
     "Chunk",
     "Claim",
+    "BlockedSource",
+    "ClaimVerdict",
     "ProvenanceResult",
     "ProvenanceMiddleware",
     "ComplianceViolation",
@@ -167,4 +175,4 @@ __all__ = [
 ]
 
 # Version
-__version__ = "0.1.1"
+__version__ = "0.1.2"

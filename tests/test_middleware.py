@@ -29,10 +29,9 @@ def test_middleware_audit_returns_provenance_result(
 @pytest.mark.semantic
 def test_middleware_audit_compliance_rate_between_zero_and_one(
     sample_chunks: list[Chunk],
-    semantic_config: Config,
     grounded_response: str,
 ) -> None:
-    middleware = ProvenanceMiddleware(semantic_config)
+    middleware = ProvenanceMiddleware(Config(matcher="bm25", min_citation_rate=0.0))
     result = middleware.audit("test query", sample_chunks, grounded_response)
     assert 0.0 <= result.compliance_rate <= 1.0
 
@@ -55,15 +54,16 @@ def test_middleware_audit_populates_blocked_sources(
     middleware = ProvenanceMiddleware(strict_config)
     result = middleware.audit("test query", sample_chunks, grounded_response)
     assert "https://discountpharma.biz/meds" in result.blocked_sources
+    assert result.blocked_source_details[0].reason == "domain_not_allowlisted"
+    assert result.policy_issues == ["blocked_sources"]
 
 
 @pytest.mark.semantic
 def test_middleware_audit_populates_provenance_map(
     sample_chunks: list[Chunk],
-    semantic_config: Config,
     grounded_response: str,
 ) -> None:
-    middleware = ProvenanceMiddleware(semantic_config)
+    middleware = ProvenanceMiddleware(Config(matcher="bm25", min_citation_rate=0.0))
     result = middleware.audit("test query", sample_chunks, grounded_response)
     # At least some supported claims should appear in the provenance map.
     assert isinstance(result.provenance_map, dict)
@@ -104,6 +104,10 @@ def test_middleware_raises_compliance_violation_when_configured(
     with pytest.raises(ComplianceViolation) as exc_info:
         middleware.audit("test query", sample_chunks, _UNGROUNDED_RESPONSE)
     assert isinstance(exc_info.value.result, ProvenanceResult)
+    assert exc_info.value.result.raised_on_violation is True
+    assert exc_info.value.result.enforcement_verdict == "enforce_raised"
+    assert exc_info.value.result.policy_issues == ["unsupported_claims"]
+    assert "Policy issues: unsupported_claims." in str(exc_info.value)
 
 
 def test_middleware_no_raise_when_fail_on_violation_false(
@@ -115,21 +119,24 @@ def test_middleware_no_raise_when_fail_on_violation_false(
     result = middleware.audit("test query", sample_chunks, _UNGROUNDED_RESPONSE)
     assert isinstance(result, ProvenanceResult)
     assert result.passed is False
+    assert result.enforcement_mode == "guardrail"
+    assert result.enforcement_verdict == "guardrail_failed"
+    assert result.policy_issues == ["unsupported_claims"]
 
 
 @pytest.mark.asyncio
 @pytest.mark.semantic
 async def test_middleware_aaudit_matches_sync_audit(
     sample_chunks: list[Chunk],
-    semantic_config: Config,
     grounded_response: str,
 ) -> None:
-    middleware = ProvenanceMiddleware(semantic_config)
+    middleware = ProvenanceMiddleware(Config(matcher="bm25", min_citation_rate=0.0))
     sync_result = middleware.audit("test query", sample_chunks, grounded_response)
     async_result = await middleware.aaudit("test query", sample_chunks, grounded_response)
     assert async_result.compliance_rate == sync_result.compliance_rate
     assert async_result.passed == sync_result.passed
     assert async_result.blocked_sources == sync_result.blocked_sources
+    assert async_result.blocked_source_details == sync_result.blocked_source_details
     assert len(async_result.claims) == len(sync_result.claims)
 
 
@@ -195,7 +202,7 @@ async def test_aaudit_does_not_emit_deprecation_warning(
     """aaudit must not emit DeprecationWarning for get_event_loop."""
     import warnings
 
-    config = Config(matcher="semantic", min_citation_rate=0.0)
+    config = Config(matcher="bm25", min_citation_rate=0.0)
     middleware = ProvenanceMiddleware(config)
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)
@@ -214,3 +221,55 @@ def test_middleware_violations_property_returns_unsupported_claims(
     violations = result.violations
     assert all(not c.supported for c in violations)
     assert len(violations) == sum(1 for c in result.claims if not c.supported)
+
+
+def test_middleware_supports_explicit_audit_mode_without_raising(
+    sample_chunks: list[Chunk],
+) -> None:
+    config = Config(
+        enforcement_mode="audit",
+        min_citation_rate=1.0,
+        fail_on_violation=True,
+    )
+    middleware = ProvenanceMiddleware(config)
+    result = middleware.audit("test query", sample_chunks, _UNGROUNDED_RESPONSE)
+    assert result.passed is False
+    assert result.enforcement_mode == "audit"
+    assert result.enforcement_verdict == "audit_failed"
+    assert result.raised_on_violation is False
+
+
+def test_middleware_populates_claim_verdict_report(
+    sample_chunks: list[Chunk],
+) -> None:
+    config = Config(min_citation_rate=1.0, matcher="bm25")
+    middleware = ProvenanceMiddleware(config)
+    result = middleware.audit("test query", sample_chunks, _UNGROUNDED_RESPONSE)
+    assert len(result.claim_verdicts) == len(result.claims)
+    assert all(verdict.verdict == "unsupported" for verdict in result.claim_verdicts)
+    assert all(verdict.supporting_url is None for verdict in result.claim_verdicts)
+    assert result.has_unsupported_claims is True
+
+
+def test_middleware_policy_issues_capture_blocked_and_unsupported_states(
+    sample_chunks: list[Chunk],
+    strict_config: Config,
+) -> None:
+    middleware = ProvenanceMiddleware(strict_config)
+    result = middleware.audit("test query", sample_chunks, _UNGROUNDED_RESPONSE)
+    assert result.policy_issues == ["blocked_sources", "unsupported_claims"]
+
+
+def test_middleware_result_serialization_includes_reporting_fields(
+    sample_chunks: list[Chunk],
+    strict_config: Config,
+    grounded_response: str,
+) -> None:
+    middleware = ProvenanceMiddleware(strict_config)
+    result = middleware.audit("test query", sample_chunks, grounded_response)
+    payload = result.model_dump()
+    assert "blocked_source_details" in payload
+    assert "claim_verdicts" in payload
+    assert "enforcement_verdict" in payload
+    assert "policy_issues" in payload
+    assert payload["has_blocked_sources"] is True
