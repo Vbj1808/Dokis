@@ -37,6 +37,8 @@ def test_render_audit_report_surfaces_double_x_sections(
     assert "Audit Summary" in report
     assert "Enforcement mode: guardrail" in report
     assert "Enforcement verdict: guardrail_failed" in report
+    assert "Support passed: no" in report
+    assert "Trust passed: no" in report
     assert "Policy Issues" in report
     assert "[ISSUE] blocked_sources" in report
     assert "[ISSUE] unsupported_claims" in report
@@ -45,9 +47,9 @@ def test_render_audit_report_surfaces_double_x_sections(
     assert "[BLOCKED] https://discountpharma.biz/meds" in report
     assert "reason: Domain not on the allowlist" in report
     assert "Claim Verdicts" in report
-    assert "[SUPPORTED]" in report
+    assert "[SUPPORTED FRESH]" in report or "[SUPPORTED AGE UNKNOWN]" in report
     assert "[UNSUPPORTED]" in report
-    assert "Final Compliance" in report
+    assert "Final Trust" in report
 
 
 def test_cli_audit_command_renders_report_for_sample_file() -> None:
@@ -71,4 +73,27 @@ def test_cli_audit_command_renders_report_for_sample_file() -> None:
         "[UNSUPPORTED] Aspirin has no meaningful drug interactions "
         "with other medicines."
     ) in completed.stdout
-    assert "Compliance: 66.7% (required: 85.0%)" in completed.stdout
+    assert "Support compliance: 66.7% (required: 85.0%)" in completed.stdout
+
+
+def test_cli_stale_demo_fails_trust_even_when_support_passes() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    sample_path = repo_root / "sample_stale_audit.json"
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "dokis", "audit", str(sample_path), "--no-color"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 1
+    assert "Freshness policy: max_source_age_days=365" in completed.stdout
+    assert "[ISSUE] stale_sources" in completed.stdout
+    assert "[ISSUE] stale_supported_claims" in completed.stdout
+    assert "[STALE] https://who.int/archive/formulary-2018" in completed.stdout
+    assert "[SUPPORTED STALE]" in completed.stdout
+    assert "Support passed: yes" in completed.stdout
+    assert "Freshness passed: no" in completed.stdout
+    assert "Trust passed: no" in completed.stdout

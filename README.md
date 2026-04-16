@@ -26,15 +26,22 @@ Existing tools don't solve this at runtime:
 
 Dokis sits inline between retrieval and response delivery and returns a runtime trust report for the exact answer your system is about to ship. It acts as a provenance and enforcement boundary in real time.
 
+Now it answers two separate questions:
+
+- is this supported?
+- is this support fresh enough to trust?
+
 ---
 
 ## How it works
 
-Dokis does two things in one deterministic runtime pass:
+Dokis does three trust checks in one deterministic runtime pass:
 
 **1. Pre-retrieval enforcement.** Strip chunks whose source URL is not on your allowlist before they enter the prompt.
 
-**2. Post-generation auditing.** Split the response into atomic claim sentences. Match each claim to the best supporting chunk using BM25 lexical scoring by default. Build a `claim → chunk → URL` provenance map. Compute a compliance rate. Return blocked-source details, claim-level verdicts, policy issues, and a final enforcement verdict.
+**2. Post-generation support auditing.** Split the response into atomic claim sentences. Match each claim to the best supporting chunk using BM25 lexical scoring by default. Build a `claim → chunk → URL` provenance map. Compute a compliance rate.
+
+**3. Temporal trust evaluation.** If freshness policy is configured, derive source age from chunk metadata and distinguish `supported_fresh`, `supported_stale`, and `unsupported`. Return stale-source details, freshness-aware claim verdicts, policy issues, and a final trust verdict.
 
 No LLM call or API key is required for the default BM25 path. Output is deterministic for identical inputs and config.
 
@@ -51,7 +58,7 @@ No LLM call or API key is required for the default BM25 path. Output is determin
 
 <div align="center">
 
-![Dokis CLI demo](https://raw.githubusercontent.com/Vbj1808/dokis/main/assets/demo.png)
+![Dokis CLI demo](https://raw.githubusercontent.com/Vbj1808/dokis/main/assets/demo.jpeg)
 
 </div>
 
@@ -68,9 +75,10 @@ result = dokis.audit(query, chunks, response)
 
 print(result.compliance_rate)   # 0.91
 print(result.passed)            # True
+print(result.trust_passed)      # True
 print(result.provenance_map)    # {"Aspirin inhibits...": "https://pubmed.com/1"}
 print(result.violations)        # claims with no source
-print(result.claim_verdicts)    # explicit supported / unsupported report
+print(result.claim_verdicts)    # supported_fresh / supported_stale / unsupported
 print(result.policy_issues)     # [] | ["blocked_sources"] | ...
 print(result.enforcement_mode)  # "guardrail"
 print(result.enforcement_verdict)  # "passed"
@@ -85,9 +93,9 @@ dokis audit sample_audit.json
 The CLI reads a JSON file containing `query`, `chunks`, and `response`. If a
 `provenance.toml` file is present in the current directory or beside the input
 file, Dokis loads it automatically so the report reflects your real allowlist,
-threshold, matcher, and enforcement mode. Use `--config path/to/file.toml` to
+threshold, matcher, freshness policy, and enforcement mode. Use `--config path/to/file.toml` to
 override that discovery. Use `--no-color` for plain output. Exit code is `0`
-when the audit passes, `1` when it fails policy/compliance checks, and `2`
+when the full trust result passes, `1` when it fails policy/trust checks, and `2`
 for CLI/input errors.
 
 ### With config
@@ -100,13 +108,15 @@ config = dokis.Config(
     min_citation_rate = 0.85,
     claim_threshold   = 0.3,
     enforcement_mode  = "guardrail",
+    max_source_age_days = 365,
+    stale_source_action = "fail",
 )
 
 clean_chunks = dokis.filter(raw_chunks, config)
 response     = llm.invoke(build_prompt(query, clean_chunks))
 result       = dokis.audit(query, clean_chunks, response, config=config)
 
-if not result.passed:
+if not result.trust_passed:
     raise dokis.ComplianceViolation(result)
 ```
 
@@ -156,6 +166,8 @@ mw = ProvenanceMiddleware(Config(
     matcher           = "bm25",
     claim_threshold   = 0.3,
     enforcement_mode  = "guardrail",
+    max_source_age_days = 365,
+    stale_source_action = "fail",
 ))
 
 result = mw.audit(query, chunks, response)
@@ -192,6 +204,9 @@ dokis.Config(
     matcher           = "bm25",         # "bm25" | "semantic"
     model             = "all-MiniLM-L6-v2",
     enforcement_mode  = "guardrail",    # "audit" | "guardrail" | "enforce"
+    max_source_age_days = None,         # optional freshness policy
+    stale_source_action = "warn",       # "warn" | "fail"
+    source_date_metadata_key = None,    # optional metadata key override
     domain            = None,
 )
 ```
@@ -203,6 +218,21 @@ interface for new configs and examples.
 **`claim_threshold` by matcher:**
 - `matcher="bm25"`: normalised per-query BM25 score. Recommended: `0.3–0.5`.
 - `matcher="semantic"`: cosine similarity. Recommended: `0.65–0.85`.
+
+**Freshness policy:**
+- Set `max_source_age_days` to enable temporal trust checks.
+- Dokis derives source dates from `Chunk.metadata`, checking a configured key first and then common keys like `published_at`, `date`, and `year`.
+- Year-only metadata is treated conservatively as January 1 of that year.
+- `stale_source_action="warn"` surfaces stale support without failing trust.
+- `stale_source_action="fail"` makes stale supporting evidence fail the final trust result.
+
+### Terrifying demo
+
+```bash
+dokis audit sample_stale_audit.json
+```
+
+The stale demo is intentionally unsettling: every claim is grounded, but only in archived guidance that is years too old. Dokis marks the claims as `supported_stale`, shows the stale source ages, keeps `result.passed == True`, and still fails `result.trust_passed` because support alone is not enough.
 
 **Load from TOML:**
 
@@ -217,15 +247,22 @@ config = dokis.Config.from_yaml("provenance.toml")
 
 ```python
 result.compliance_rate   # float
-result.passed            # bool
+result.passed            # bool - support/compliance only
+result.freshness_passed  # bool
+result.trust_passed      # bool - final trust outcome
 result.violations        # list[Claim] (derived unsupported claims)
+result.stale_claims      # list[Claim] (derived supported-but-stale claims)
 result.provenance_map    # dict[claim_text, source_url] (derived supported claims)
 result.blocked_sources   # list[str] (backwards-compatible)
 result.blocked_source_details  # list[BlockedSource]
+result.source_freshness_details  # list[SourceFreshness]
 result.claim_verdicts    # list[ClaimVerdict]
-result.policy_issues     # ["blocked_sources", "unsupported_claims"]
+result.policy_issues     # includes stale_sources / stale_supported_claims
 result.has_blocked_sources     # bool
 result.has_unsupported_claims  # bool
+result.has_stale_sources       # bool
+result.has_stale_supported_claims  # bool
+result.has_unknown_source_ages     # bool
 result.enforcement_mode        # "audit" | "guardrail" | "enforce"
 result.enforcement_verdict     # "passed" | "..._failed" | "enforce_raised"
 result.raised_on_violation     # bool
@@ -236,6 +273,9 @@ claim.supported          # bool
 claim.confidence         # float - always set, even when False
 claim.source_url         # str | None
 claim.source_chunk       # Chunk | None
+claim.freshness_status   # "fresh" | "stale" | "unknown" | "not_applicable"
+claim.source_date        # date | None
+claim.source_age_days    # int | None
 
 blocked.url              # str
 blocked.domain           # str | None
@@ -243,6 +283,7 @@ blocked.reason           # "domain_not_allowlisted" | "malformed_source_url" | "
 
 verdict.claim_text       # str
 verdict.verdict          # "supported" | "unsupported"
+verdict.trust_status     # "supported_fresh" | "supported_stale" | ...
 verdict.confidence       # float
 verdict.supporting_url   # str | None
 verdict.note             # str | None

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dokis"
-version = "0.1.2"
+version = "0.1.3"
 description = "Trust reporting and provenance enforcement for RAG pipelines. Audits claim grounding, source allowlists, and trust failures without an LLM call."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -84,4 +84,3 @@ asyncio_default_test_loop_scope = "function"
 markers = [
     "semantic: tests that require sentence-transformers (pip install dokis[semantic])",
 ]
-

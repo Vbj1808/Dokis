@@ -58,6 +58,16 @@ class Config(BaseModel):
             ``"guardrail"`` returns a result and marks policy failure in the
             result. ``"enforce"`` fails closed by raising
             :class:`~dokis.exceptions.ComplianceViolation`.
+        max_source_age_days: Optional freshness threshold for supporting
+            evidence. When set, Dokis derives source age from chunk metadata
+            and marks support as stale once the source age exceeds this many
+            days. ``None`` disables freshness checks entirely.
+        stale_source_action: Whether stale supporting evidence should only be
+            reported (``"warn"``) or should fail trust policy
+            (``"fail"``). Ignored when ``max_source_age_days`` is ``None``.
+        source_date_metadata_key: Optional metadata key to check first when
+            deriving source dates from chunk metadata. Dokis still falls back
+            to common local keys like ``year`` and ``published_at``.
         fail_on_violation: Backwards-compatible alias for enforce mode. Kept
             for existing configs and examples. If both settings are present,
             ``enforcement_mode`` takes precedence.
@@ -79,6 +89,9 @@ class Config(BaseModel):
     matcher: Literal["bm25", "semantic"] = "bm25"
     model: str = "all-MiniLM-L6-v2"
     enforcement_mode: Literal["audit", "guardrail", "enforce"] | None = None
+    max_source_age_days: int | None = None
+    stale_source_action: Literal["warn", "fail"] = "warn"
+    source_date_metadata_key: str | None = None
     fail_on_violation: bool = False
     domain: str | None = None
     llm_fn: Callable[[str], str] | None = Field(default=None, exclude=True)
@@ -90,21 +103,24 @@ class Config(BaseModel):
             raise ValueError("Value must be between 0.0 and 1.0 inclusive.")
         return value
 
+    @field_validator("max_source_age_days", mode="after")
+    @classmethod
+    def _validate_max_source_age_days(cls, value: int | None) -> int | None:
+        if value is not None and value < 0:
+            raise ValueError("max_source_age_days must be non-negative.")
+        return value
+
     @model_validator(mode="after")
     def _strip_www(self) -> Self:
         """Strip leading ``www.`` from every entry in ``allowed_domains``."""
-        self.allowed_domains = [
-            _strip_www_prefix(d) for d in self.allowed_domains
-        ]
+        self.allowed_domains = [_strip_www_prefix(d) for d in self.allowed_domains]
         return self
 
     @model_validator(mode="after")
     def _resolve_enforcement_mode(self) -> Self:
         """Keep the new enforcement mode and legacy bool in sync."""
         if self.enforcement_mode is None:
-            self.enforcement_mode = (
-                "enforce" if self.fail_on_violation else "guardrail"
-            )
+            self.enforcement_mode = "enforce" if self.fail_on_violation else "guardrail"
         self.fail_on_violation = self.enforcement_mode == "enforce"
         return self
 

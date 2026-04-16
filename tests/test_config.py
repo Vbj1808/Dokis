@@ -20,10 +20,19 @@ def test_config_from_yaml_raises_on_yaml_extension(tmp_path: Path) -> None:
 def test_config_from_yaml_loads_toml(tmp_path: Path) -> None:
     """from_yaml() must load a valid TOML file correctly."""
     f = tmp_path / "config.toml"
-    f.write_bytes(b"min_citation_rate = 0.90\nclaim_threshold = 0.65\n")
+    f.write_bytes(
+        b"min_citation_rate = 0.90\n"
+        b"claim_threshold = 0.65\n"
+        b"max_source_age_days = 30\n"
+        b'stale_source_action = "fail"\n'
+        b'source_date_metadata_key = "published_on"\n'
+    )
     config = Config.from_yaml(f)
     assert config.min_citation_rate == pytest.approx(0.90)
     assert config.claim_threshold == pytest.approx(0.65)
+    assert config.max_source_age_days == 30
+    assert config.stale_source_action == "fail"
+    assert config.source_date_metadata_key == "published_on"
 
 
 def test_fail_on_violation_maps_to_enforce_mode() -> None:
@@ -48,3 +57,8 @@ def test_enforcement_mode_overrides_legacy_fail_on_violation() -> None:
     )
     assert config.enforcement_mode == "audit"
     assert config.fail_on_violation is False
+
+
+def test_config_rejects_negative_max_source_age_days() -> None:
+    with pytest.raises(ValueError, match="max_source_age_days"):
+        Config(max_source_age_days=-1)

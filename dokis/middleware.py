@@ -7,6 +7,7 @@ from typing import Literal
 from dokis.config import Config
 from dokis.core.enforcer import DomainEnforcer
 from dokis.core.extractor import ClaimExtractor
+from dokis.core.freshness import FreshnessEvaluator
 from dokis.core.matcher import ClaimMatcher
 from dokis.core.scorer import ComplianceScorer
 from dokis.exceptions import ComplianceViolation
@@ -16,6 +17,7 @@ from dokis.models import (
     Claim,
     ClaimVerdict,
     ProvenanceResult,
+    SourceFreshness,
 )
 
 
@@ -45,6 +47,7 @@ class ProvenanceMiddleware:
         self.config = config
         self.enforcer = DomainEnforcer(config)
         self.extractor = ClaimExtractor(config)
+        self.freshness = FreshnessEvaluator(config)
         self.matcher = ClaimMatcher(config)
         self.scorer = ComplianceScorer(config)
 
@@ -116,9 +119,13 @@ class ProvenanceMiddleware:
 
         # 3. Match claims to supporting chunks.
         claims = self.matcher.match(claim_texts, clean_chunks)
+        source_freshness_details = self._build_source_freshness_details(clean_chunks)
+        claims = self._apply_freshness(claims, source_freshness_details)
 
         # 4. Score compliance.
         compliance_rate, passed = self.scorer.score(claims)
+        freshness_passed = self._freshness_passed(claims)
+        trust_passed = passed and freshness_passed
 
         result = ProvenanceResult(
             response=response,
@@ -127,20 +134,41 @@ class ProvenanceMiddleware:
             passed=passed,
             blocked_sources=[entry.url for entry in blocked_source_details],
             blocked_source_details=blocked_source_details,
+            source_freshness_details=source_freshness_details,
             claim_verdicts=self._build_claim_verdicts(claims),
             policy_issues=self._build_policy_issues(
                 blocked_source_details=blocked_source_details,
                 claims=claims,
+                source_freshness_details=source_freshness_details,
             ),
             has_blocked_sources=bool(blocked_source_details),
             has_unsupported_claims=any(not claim.supported for claim in claims),
+            has_stale_sources=any(
+                detail.status == "stale" for detail in source_freshness_details
+            ),
+            has_stale_supported_claims=any(
+                claim.supported and claim.freshness_status == "stale"
+                for claim in claims
+            ),
+            has_unknown_source_ages=any(
+                detail.status == "unknown" for detail in source_freshness_details
+            ),
+            freshness_enabled=self.config.max_source_age_days is not None,
+            freshness_passed=freshness_passed,
+            trust_passed=trust_passed,
+            max_source_age_days=self.config.max_source_age_days,
+            stale_source_action=(
+                self.config.stale_source_action
+                if self.config.max_source_age_days is not None
+                else None
+            ),
             domain=self.config.domain,
             min_citation_rate=self.config.min_citation_rate,
             enforcement_mode=self.config.enforcement_mode or "guardrail",
-            enforcement_verdict=self._resolve_enforcement_verdict(passed),
+            enforcement_verdict=self._resolve_enforcement_verdict(trust_passed),
         )
 
-        if self.config.enforcement_mode == "enforce" and not result.passed:
+        if self.config.enforcement_mode == "enforce" and not result.trust_passed:
             result.raised_on_violation = True
             result.enforcement_verdict = "enforce_raised"
             raise ComplianceViolation(result)
@@ -152,17 +180,18 @@ class ProvenanceMiddleware:
         verdicts: list[ClaimVerdict] = []
         for claim in claims:
             supported = claim.supported and claim.source_url is not None
+            trust_status = self._claim_trust_status(claim)
             verdicts.append(
                 ClaimVerdict(
                     claim_text=claim.text,
                     verdict="supported" if supported else "unsupported",
+                    trust_status=trust_status,
+                    freshness_status=claim.freshness_status,
                     confidence=claim.confidence,
                     supporting_url=claim.source_url if supported else None,
-                    note=(
-                        None
-                        if supported
-                        else "No supporting source met the configured threshold."
-                    ),
+                    source_date=claim.source_date,
+                    source_age_days=claim.source_age_days,
+                    note=(self._claim_note(claim, supported)),
                 )
             )
         return verdicts
@@ -172,13 +201,38 @@ class ProvenanceMiddleware:
         *,
         blocked_source_details: list[BlockedSource],
         claims: list[Claim],
-    ) -> list[Literal["blocked_sources", "unsupported_claims"]]:
+        source_freshness_details: list[SourceFreshness],
+    ) -> list[
+        Literal[
+            "blocked_sources",
+            "unsupported_claims",
+            "stale_sources",
+            "stale_supported_claims",
+            "unknown_source_ages",
+        ]
+    ]:
         """Return a compact structured summary of audit-level policy issues."""
-        issues: list[Literal["blocked_sources", "unsupported_claims"]] = []
+        issues: list[
+            Literal[
+                "blocked_sources",
+                "unsupported_claims",
+                "stale_sources",
+                "stale_supported_claims",
+                "unknown_source_ages",
+            ]
+        ] = []
         if blocked_source_details:
             issues.append("blocked_sources")
         if any(not claim.supported for claim in claims):
             issues.append("unsupported_claims")
+        if any(detail.status == "stale" for detail in source_freshness_details):
+            issues.append("stale_sources")
+        if any(
+            claim.supported and claim.freshness_status == "stale" for claim in claims
+        ):
+            issues.append("stale_supported_claims")
+        if any(detail.status == "unknown" for detail in source_freshness_details):
+            issues.append("unknown_source_ages")
         return issues
 
     def _resolve_enforcement_verdict(
@@ -191,6 +245,100 @@ class ProvenanceMiddleware:
         if self.config.enforcement_mode == "audit":
             return "audit_failed"
         return "guardrail_failed"
+
+    def _build_source_freshness_details(
+        self,
+        chunks: list[Chunk],
+    ) -> list[SourceFreshness]:
+        """Return one freshness record per unique allowed source URL."""
+        details: list[SourceFreshness] = []
+        seen: set[str] = set()
+        for chunk in chunks:
+            if chunk.source_url in seen:
+                continue
+            seen.add(chunk.source_url)
+            assessment = self.freshness.assess(chunk)
+            details.append(
+                SourceFreshness(
+                    url=chunk.source_url,
+                    status=assessment.status,
+                    source_date=assessment.source_date,
+                    age_days=assessment.age_days,
+                    metadata_key=assessment.metadata_key,
+                    note=assessment.note,
+                )
+            )
+        return details
+
+    def _apply_freshness(
+        self,
+        claims: list[Claim],
+        source_freshness_details: list[SourceFreshness],
+    ) -> list[Claim]:
+        """Annotate supported claims with freshness details from their source."""
+        by_url = {detail.url: detail for detail in source_freshness_details}
+        updated: list[Claim] = []
+        for claim in claims:
+            if not claim.supported or claim.source_url is None:
+                updated.append(claim)
+                continue
+            detail = by_url.get(claim.source_url)
+            if detail is None:
+                updated.append(claim)
+                continue
+            updated.append(
+                claim.model_copy(
+                    update={
+                        "freshness_status": detail.status,
+                        "source_date": detail.source_date,
+                        "source_age_days": detail.age_days,
+                        "source_date_metadata_key": detail.metadata_key,
+                    }
+                )
+            )
+        return updated
+
+    def _freshness_passed(self, claims: list[Claim]) -> bool:
+        """Return whether freshness policy failed trust."""
+        if self.config.max_source_age_days is None:
+            return True
+        if self.config.stale_source_action != "fail":
+            return True
+        return not any(
+            claim.supported and claim.freshness_status == "stale" for claim in claims
+        )
+
+    def _claim_trust_status(
+        self,
+        claim: Claim,
+    ) -> Literal[
+        "supported_fresh",
+        "supported_stale",
+        "supported_unknown_age",
+        "unsupported",
+    ]:
+        if not claim.supported:
+            return "unsupported"
+        if claim.freshness_status == "stale":
+            return "supported_stale"
+        if claim.freshness_status == "unknown":
+            return "supported_unknown_age"
+        return "supported_fresh"
+
+    def _claim_note(self, claim: Claim, supported: bool) -> str | None:
+        """Return a compact claim-level explanation for report output."""
+        if not supported:
+            return "No supporting source met the configured threshold."
+        if claim.freshness_status == "stale":
+            assert claim.source_age_days is not None
+            assert self.config.max_source_age_days is not None
+            return (
+                f"Supporting source is stale: {claim.source_age_days} days old "
+                f"(max allowed: {self.config.max_source_age_days})."
+            )
+        if claim.freshness_status == "unknown":
+            return "Supporting source age could not be determined from chunk metadata."
+        return None
 
     async def afilter(self, chunks: list[Chunk]) -> list[Chunk]:
         """Async version of :meth:`filter`.

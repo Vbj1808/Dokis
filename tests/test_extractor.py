@@ -27,8 +27,7 @@ def test_extractor_splits_multi_sentence_response(extractor: ClaimExtractor) -> 
 def test_extractor_filters_short_sentences(extractor: ClaimExtractor) -> None:
     # "In summary." is 2 words — must be filtered out.
     response = (
-        "In summary. "
-        "Aspirin reduces fever by inhibiting COX enzymes in the body."
+        "In summary. Aspirin reduces fever by inhibiting COX enzymes in the body."
     )
     claims = extractor.extract(response)
     assert len(claims) == 1
@@ -94,7 +93,9 @@ def test_extractor_regex_path_filters_short_sentences() -> None:
     """Regex path must still apply the 8-word minimum filter."""
     config = Config()
     extractor = ClaimExtractor(config)
-    response = "In summary. Aspirin reduces fever by inhibiting COX enzymes in the body."
+    response = (
+        "In summary. Aspirin reduces fever by inhibiting COX enzymes in the body."
+    )
     claims = extractor.extract(response)
     assert len(claims) == 1
     assert "Aspirin" in claims[0]

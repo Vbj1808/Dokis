@@ -49,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         stream = sys.stdout
         stream.write(report)
-        return 0 if result.passed else 1
+        return 0 if result.trust_passed else 1
     except FileNotFoundError as exc:
         print(f"Dokis CLI error: {exc}", file=sys.stderr)
         return 2

@@ -14,12 +14,14 @@ from dokis.models import Chunk, Claim
 
 try:
     import bm25s
+
     _BM25_AVAILABLE: bool = True
 except ImportError:
     _BM25_AVAILABLE = False
 
 
 logger = logging.getLogger(__name__)
+
 
 def _get_sentence_transformer_class() -> Any | None:
     try:
@@ -38,16 +40,12 @@ _MAX_CLAIMS: int = int(os.environ.get("DOKIS_MAX_CLAIMS", 500))
 # normalization. Scores below this floor indicate only stopword overlap
 # and are treated as no-match regardless of claim_threshold.
 # Overridable via env var for domain tuning.
-_MIN_BM25_RAW_SCORE: float = float(
-    os.environ.get("DOKIS_MIN_BM25_RAW_SCORE", "0.5")
-)
+_MIN_BM25_RAW_SCORE: float = float(os.environ.get("DOKIS_MIN_BM25_RAW_SCORE", "0.5"))
 
 # Maximum number of distinct chunk sets to cache BM25 indexes for.
 # Oldest entry is evicted when the limit is reached.
 # Overridable via env var for servers with many distinct chunk sets.
-_MAX_BM25_CACHE_SIZE: int = int(
-    os.environ.get("DOKIS_MAX_BM25_CACHE_SIZE", "32")
-)
+_MAX_BM25_CACHE_SIZE: int = int(os.environ.get("DOKIS_MAX_BM25_CACHE_SIZE", "32"))
 
 
 def _cosine_similarity(
@@ -188,9 +186,7 @@ class ClaimMatcher:
             self._bm25_cache[cache_key] = retriever
         return self._bm25_cache[cache_key]
 
-    def _match_bm25(
-        self, claims: list[str], chunks: list[Chunk]
-    ) -> list[Claim]:
+    def _match_bm25(self, claims: list[str], chunks: list[Chunk]) -> list[Claim]:
         """Match claims to chunks using BM25 lexical scoring.
 
         Builds a BM25 index over chunk contents, queries it once per claim.
@@ -231,7 +227,6 @@ class ClaimMatcher:
                 doc_indices[0], dtype=np.int64
             )
 
-
             max_score = float(scores_1d.max()) if scores_1d.size > 0 else 0.0
 
             if max_score < _MIN_BM25_RAW_SCORE:
@@ -267,9 +262,7 @@ class ClaimMatcher:
 
         return result
 
-    def _match_semantic(
-        self, claims: list[str], chunks: list[Chunk]
-    ) -> list[Claim]:
+    def _match_semantic(self, claims: list[str], chunks: list[Chunk]) -> list[Claim]:
         """Match claims to chunks using SentenceTransformer cosine similarity.
 
         Batch-encodes claims and chunks into dense vectors, computes a full

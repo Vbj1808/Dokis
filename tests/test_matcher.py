@@ -31,8 +31,12 @@ def fake_semantic_model(
                 vectors.append(
                     np.array(
                         [
-                            1.0 if "aspirin" in lower or "cox" in lower or "fever" in lower else 0.1,
-                            1.0 if "ibuprofen" in lower or "anti-inflammatory" in lower else 0.1,
+                            1.0
+                            if "aspirin" in lower or "cox" in lower or "fever" in lower
+                            else 0.1,
+                            1.0
+                            if "ibuprofen" in lower or "anti-inflammatory" in lower
+                            else 0.1,
                             min(token_count / 20.0, 1.0),
                         ],
                         dtype=np.float64,
@@ -149,7 +153,9 @@ def test_matcher_empty_claims_returns_empty_list(
 
 
 @pytest.mark.semantic
-def test_matcher_empty_chunks_returns_empty_list(semantic_matcher: ClaimMatcher) -> None:
+def test_matcher_empty_chunks_returns_empty_list(
+    semantic_matcher: ClaimMatcher,
+) -> None:
     claims = ["Aspirin inhibits the COX enzymes and reduces fever."]
     results = semantic_matcher.match(claims, [])
     assert results == []
@@ -238,7 +244,9 @@ def test_bm25_matcher_empty_claims_returns_empty_list(
     assert results == []
 
 
-def test_bm25_matcher_empty_chunks_returns_empty_list(bm25_matcher: ClaimMatcher) -> None:
+def test_bm25_matcher_empty_chunks_returns_empty_list(
+    bm25_matcher: ClaimMatcher,
+) -> None:
     claims = ["Aspirin inhibits the COX enzymes and reduces fever."]
     results = bm25_matcher.match(claims, [])
     assert results == []
@@ -374,9 +382,7 @@ def test_bm25_matcher_warns_when_model_is_set(
 
     with caplog.at_level(logging.WARNING, logger="dokis.core.matcher"):
         ClaimMatcher(Config(matcher="bm25", model="paraphrase-MiniLM-L6-v2"))
-    assert any(
-        "model" in r.message and "ignored" in r.message for r in caplog.records
-    )
+    assert any("model" in r.message and "ignored" in r.message for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------
@@ -421,9 +427,15 @@ def test_bm25_cache_evicts_oldest_when_full(
     try:
         matcher = ClaimMatcher(Config(matcher="bm25", claim_threshold=0.3))
         claims = ["Aspirin inhibits COX enzymes."]
-        chunks_a = [Chunk(content="alpha content about aspirin", source_url="https://a.com")]
-        chunks_b = [Chunk(content="beta content about ibuprofen", source_url="https://b.com")]
-        chunks_c = [Chunk(content="gamma content about paracetamol", source_url="https://c.com")]
+        chunks_a = [
+            Chunk(content="alpha content about aspirin", source_url="https://a.com")
+        ]
+        chunks_b = [
+            Chunk(content="beta content about ibuprofen", source_url="https://b.com")
+        ]
+        chunks_c = [
+            Chunk(content="gamma content about paracetamol", source_url="https://c.com")
+        ]
         matcher.match(claims, chunks_a)
         matcher.match(claims, chunks_b)
         assert len(matcher._bm25_cache) == 2

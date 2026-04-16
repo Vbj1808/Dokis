@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -36,6 +37,10 @@ class Claim(BaseModel):
             when ``supported=False``.
         source_url: Shortcut for ``source_chunk.source_url``, or ``None``
             when ``supported=False``.
+        freshness_status: Temporal trust status for the supporting source.
+        source_date: Parsed publication/update date derived from chunk
+            metadata when freshness policy is active.
+        source_age_days: Source age in days when derivable.
     """
 
     text: str
@@ -43,6 +48,12 @@ class Claim(BaseModel):
     confidence: float
     source_chunk: Chunk | None
     source_url: str | None
+    freshness_status: Literal["fresh", "stale", "unknown", "not_applicable"] = (
+        "not_applicable"
+    )
+    source_date: date | None = None
+    source_age_days: int | None = None
+    source_date_metadata_key: str | None = None
 
 
 class BlockedSource(BaseModel):
@@ -62,8 +73,30 @@ class ClaimVerdict(BaseModel):
 
     claim_text: str
     verdict: Literal["supported", "unsupported"]
+    trust_status: Literal[
+        "supported_fresh",
+        "supported_stale",
+        "supported_unknown_age",
+        "unsupported",
+    ] = "unsupported"
+    freshness_status: Literal["fresh", "stale", "unknown", "not_applicable"] = (
+        "not_applicable"
+    )
     confidence: float
     supporting_url: str | None = None
+    source_date: date | None = None
+    source_age_days: int | None = None
+    note: str | None = None
+
+
+class SourceFreshness(BaseModel):
+    """Structured freshness status for a unique source URL."""
+
+    url: str
+    status: Literal["fresh", "stale", "unknown", "not_applicable"]
+    source_date: date | None = None
+    age_days: int | None = None
+    metadata_key: str | None = None
     note: str | None = None
 
 
@@ -85,10 +118,15 @@ class ProvenanceResult(BaseModel):
         claim_verdicts: Report-oriented claim-level decisions with explicit
             support verdicts and supporting URLs.
         policy_issues: Compact structured summary of whether blocked sources
-            and/or unsupported claims were present in this audit result.
+            unsupported claims, stale support, and other trust issues were
+            present in this audit result.
         has_blocked_sources: ``True`` when any source was blocked by policy.
         has_unsupported_claims: ``True`` when any extracted claim is
             unsupported by the filtered chunk set.
+        freshness_enabled: ``True`` when temporal trust policy is active.
+        freshness_passed: ``True`` when freshness policy did not fail.
+        trust_passed: ``True`` when both support/compliance and freshness
+            policy passed.
         domain: Optional domain label from the config (e.g. ``"oncology"``).
         min_citation_rate: The threshold used to compute ``passed``. Stored
             here so callers and exceptions can inspect it without needing the
@@ -105,12 +143,27 @@ class ProvenanceResult(BaseModel):
     passed: bool
     blocked_sources: list[str]
     blocked_source_details: list[BlockedSource] = Field(default_factory=list)
+    source_freshness_details: list[SourceFreshness] = Field(default_factory=list)
     claim_verdicts: list[ClaimVerdict] = Field(default_factory=list)
-    policy_issues: list[Literal["blocked_sources", "unsupported_claims"]] = (
-        Field(default_factory=list)
-    )
+    policy_issues: list[
+        Literal[
+            "blocked_sources",
+            "unsupported_claims",
+            "stale_sources",
+            "stale_supported_claims",
+            "unknown_source_ages",
+        ]
+    ] = Field(default_factory=list)
     has_blocked_sources: bool = False
     has_unsupported_claims: bool = False
+    has_stale_sources: bool = False
+    has_stale_supported_claims: bool = False
+    has_unknown_source_ages: bool = False
+    freshness_enabled: bool = False
+    freshness_passed: bool = True
+    trust_passed: bool = True
+    max_source_age_days: int | None = None
+    stale_source_action: Literal["warn", "fail"] | None = None
     domain: str | None
     min_citation_rate: float
     enforcement_mode: Literal["audit", "guardrail", "enforce"] = "guardrail"
@@ -140,7 +193,10 @@ class ProvenanceResult(BaseModel):
             supports it. Unsupported claims are excluded.
         """
         return {
-            c.text: c.source_url
-            for c in self.claims
-            if c.supported and c.source_url
+            c.text: c.source_url for c in self.claims if c.supported and c.source_url
         }
+
+    @property
+    def stale_claims(self) -> list[Claim]:
+        """Supported claims whose evidence is stale under freshness policy."""
+        return [c for c in self.claims if c.supported and c.freshness_status == "stale"]

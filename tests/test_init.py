@@ -22,9 +22,7 @@ def test_configure_is_thread_safe() -> None:
         except Exception as exc:
             errors.append(exc)
 
-    threads = [
-        threading.Thread(target=set_config, args=(i / 10,)) for i in range(10)
-    ]
+    threads = [threading.Thread(target=set_config, args=(i / 10,)) for i in range(10)]
     for t in threads:
         t.start()
     for t in threads:
@@ -117,6 +115,5 @@ def test_module_level_audit_reuses_middleware_for_same_config(
         dokis.audit("q", sample_chunks, grounded_response)
 
     assert construction_count == 1, (
-        "ProvenanceMiddleware was constructed more than once for the "
-        "same Config"
+        "ProvenanceMiddleware was constructed more than once for the same Config"
     )

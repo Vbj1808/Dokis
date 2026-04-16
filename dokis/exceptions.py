@@ -24,6 +24,8 @@ class ComplianceViolation(Exception):
             f"Dokis compliance check failed: {result.compliance_rate:.1%} grounded "
             f"(minimum required: {result.min_citation_rate:.1%}). "
             f"{len(result.violations)} unsupported claim(s). "
+            f"Freshness passed: {result.freshness_passed}. "
+            f"Trust passed: {result.trust_passed}. "
             f"Enforcement verdict: {result.enforcement_verdict}. "
             f"Policy issues: {', '.join(result.policy_issues) or 'none'}."
         )

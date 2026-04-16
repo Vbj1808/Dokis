@@ -15,6 +15,31 @@ _UNGROUNDED_RESPONSE = (
     "Blockchain technology enables decentralised ledger systems without intermediaries."
 )
 
+_STALE_SUPPORT_CHUNKS = [
+    Chunk(
+        content=(
+            "The archived 2018 formulary says the adult acetaminophen limit is "
+            "6 grams per day."
+        ),
+        source_url="https://who.int/archive/formulary-2018",
+        metadata={"year": 2018},
+    ),
+    Chunk(
+        content=(
+            "The archived 2017 pediatric bulletin says codeine remains a "
+            "first-line cough suppressant for children over six."
+        ),
+        source_url="https://nejm.org/archive/pediatrics-2017",
+        metadata={"year": 2017},
+    ),
+]
+
+_STALE_SUPPORT_RESPONSE = (
+    "The archived 2018 formulary says the adult acetaminophen limit is 6 grams "
+    "per day. The archived 2017 pediatric bulletin says codeine remains a "
+    "first-line cough suppressant for children over six."
+)
+
 
 def test_middleware_audit_returns_provenance_result(
     sample_chunks: list[Chunk],
@@ -132,7 +157,9 @@ async def test_middleware_aaudit_matches_sync_audit(
 ) -> None:
     middleware = ProvenanceMiddleware(Config(matcher="bm25", min_citation_rate=0.0))
     sync_result = middleware.audit("test query", sample_chunks, grounded_response)
-    async_result = await middleware.aaudit("test query", sample_chunks, grounded_response)
+    async_result = await middleware.aaudit(
+        "test query", sample_chunks, grounded_response
+    )
     assert async_result.compliance_rate == sync_result.compliance_rate
     assert async_result.passed == sync_result.passed
     assert async_result.blocked_sources == sync_result.blocked_sources
@@ -206,9 +233,7 @@ async def test_aaudit_does_not_emit_deprecation_warning(
     middleware = ProvenanceMiddleware(config)
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)
-        result = await middleware.aaudit(
-            "test query", sample_chunks, grounded_response
-        )
+        result = await middleware.aaudit("test query", sample_chunks, grounded_response)
     assert isinstance(result, ProvenanceResult)
 
 
@@ -260,6 +285,118 @@ def test_middleware_policy_issues_capture_blocked_and_unsupported_states(
     assert result.policy_issues == ["blocked_sources", "unsupported_claims"]
 
 
+def test_middleware_distinguishes_supported_stale_from_unsupported() -> None:
+    config = Config(
+        matcher="bm25",
+        min_citation_rate=1.0,
+        claim_threshold=0.3,
+        max_source_age_days=365,
+        stale_source_action="fail",
+    )
+    middleware = ProvenanceMiddleware(config)
+
+    result = middleware.audit(
+        "What does the archive recommend?",
+        _STALE_SUPPORT_CHUNKS,
+        _STALE_SUPPORT_RESPONSE,
+    )
+
+    assert result.passed is True
+    assert result.freshness_passed is False
+    assert result.trust_passed is False
+    assert result.has_stale_sources is True
+    assert result.has_stale_supported_claims is True
+    assert result.policy_issues == ["stale_sources", "stale_supported_claims"]
+    assert all(claim.supported for claim in result.claims)
+    assert all(claim.freshness_status == "stale" for claim in result.claims)
+    assert all(
+        verdict.trust_status == "supported_stale" for verdict in result.claim_verdicts
+    )
+    assert result.enforcement_verdict == "guardrail_failed"
+
+
+def test_middleware_warn_mode_surfaces_stale_support_without_failing_trust() -> None:
+    config = Config(
+        matcher="bm25",
+        min_citation_rate=1.0,
+        claim_threshold=0.3,
+        max_source_age_days=365,
+        stale_source_action="warn",
+    )
+    middleware = ProvenanceMiddleware(config)
+
+    result = middleware.audit(
+        "What does the archive recommend?",
+        _STALE_SUPPORT_CHUNKS,
+        _STALE_SUPPORT_RESPONSE,
+    )
+
+    assert result.passed is True
+    assert result.freshness_passed is True
+    assert result.trust_passed is True
+    assert result.policy_issues == ["stale_sources", "stale_supported_claims"]
+    assert result.enforcement_verdict == "passed"
+
+
+def test_middleware_raises_on_stale_support_in_enforce_mode() -> None:
+    config = Config(
+        matcher="bm25",
+        min_citation_rate=1.0,
+        claim_threshold=0.3,
+        enforcement_mode="enforce",
+        max_source_age_days=365,
+        stale_source_action="fail",
+    )
+    middleware = ProvenanceMiddleware(config)
+
+    with pytest.raises(ComplianceViolation) as exc_info:
+        middleware.audit(
+            "What does the archive recommend?",
+            _STALE_SUPPORT_CHUNKS,
+            _STALE_SUPPORT_RESPONSE,
+        )
+
+    result = exc_info.value.result
+    assert result.passed is True
+    assert result.trust_passed is False
+    assert result.enforcement_verdict == "enforce_raised"
+    assert "Freshness passed: False." in str(exc_info.value)
+
+
+def test_middleware_reports_unknown_source_age_explicitly() -> None:
+    config = Config(
+        matcher="bm25",
+        min_citation_rate=1.0,
+        claim_threshold=0.3,
+        max_source_age_days=365,
+        stale_source_action="fail",
+    )
+    middleware = ProvenanceMiddleware(config)
+    chunks = [
+        Chunk(
+            content=(
+                "The internal bulletin says every patient must return after "
+                "48 hours for reassessment."
+            ),
+            source_url="https://who.int/internal/bulletin",
+            metadata={},
+        )
+    ]
+    response = (
+        "The internal bulletin says every patient must return after 48 hours "
+        "for reassessment."
+    )
+
+    result = middleware.audit("What does the bulletin say?", chunks, response)
+
+    assert result.passed is True
+    assert result.freshness_passed is True
+    assert result.trust_passed is True
+    assert result.has_unknown_source_ages is True
+    assert result.policy_issues == ["unknown_source_ages"]
+    assert result.claim_verdicts[0].trust_status == "supported_unknown_age"
+
+
 def test_middleware_result_serialization_includes_reporting_fields(
     sample_chunks: list[Chunk],
     strict_config: Config,
@@ -272,4 +409,6 @@ def test_middleware_result_serialization_includes_reporting_fields(
     assert "claim_verdicts" in payload
     assert "enforcement_verdict" in payload
     assert "policy_issues" in payload
+    assert "trust_passed" in payload
+    assert "source_freshness_details" in payload
     assert payload["has_blocked_sources"] is True

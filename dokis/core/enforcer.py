@@ -52,9 +52,7 @@ class DomainEnforcer:
     def __init__(self, config: Config) -> None:
         self._config = config
 
-    def inspect(
-        self, chunks: list[Chunk]
-    ) -> tuple[list[Chunk], list[BlockedSource]]:
+    def inspect(self, chunks: list[Chunk]) -> tuple[list[Chunk], list[BlockedSource]]:
         """Filter chunks and return structured blocked-source details."""
         if not self._config.allowed_domains:
             return list(chunks), []
@@ -90,9 +88,7 @@ class DomainEnforcer:
 
         return clean, blocked
 
-    def filter(
-        self, chunks: list[Chunk]
-    ) -> tuple[list[Chunk], list[str]]:
+    def filter(self, chunks: list[Chunk]) -> tuple[list[Chunk], list[str]]:
         """Remove chunks whose source URL is not on the allowlist.
 
         If ``config.allowed_domains`` is empty, all chunks pass through
