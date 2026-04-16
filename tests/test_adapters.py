@@ -49,12 +49,17 @@ class _FakeBaseRetriever(BaseModel):
 
     model_config = {"arbitrary_types_allowed": True}
 
-    def invoke(self, input: str, config: Any = None, **kwargs: Any) -> list[_FakeDocument]:  # noqa: ARG002,A002
+    def invoke(
+        self, input: str, config: Any = None, **kwargs: Any
+    ) -> list[_FakeDocument]:  # noqa: ARG002,A002
         """Stub - overridden by per-test MagicMock."""
         return []
 
     def _get_relevant_documents(
-        self, query: str, *, run_manager: Any = None  # noqa: ARG002
+        self,
+        query: str,
+        *,
+        run_manager: Any = None,  # noqa: ARG002
     ) -> list[_FakeDocument]:
         return []
 
@@ -196,9 +201,7 @@ def test_provenance_retriever_filters_blocked_domains(
         base_retriever=mock_base,
         config=two_domain_config,
     )
-    docs = retriever._get_relevant_documents(
-        "query", run_manager=MagicMock()
-    )
+    docs = retriever._get_relevant_documents("query", run_manager=MagicMock())
 
     returned_urls = {d.metadata["source"] for d in docs}
     assert "https://discountpharma.biz/meds" not in returned_urls
@@ -217,9 +220,7 @@ def test_provenance_retriever_passes_allowlisted_domains(
         base_retriever=mock_base,
         config=two_domain_config,
     )
-    docs = retriever._get_relevant_documents(
-        "query", run_manager=MagicMock()
-    )
+    docs = retriever._get_relevant_documents("query", run_manager=MagicMock())
 
     returned_urls = {d.metadata["source"] for d in docs}
     assert "https://pubmed.ncbi.nlm.nih.gov/12345" in returned_urls
@@ -237,9 +238,7 @@ def test_provenance_retriever_passes_all_when_no_allowlist(
         base_retriever=mock_base,
         config=Config(),  # empty allowlist - no filtering
     )
-    docs = retriever._get_relevant_documents(
-        "query", run_manager=MagicMock()
-    )
+    docs = retriever._get_relevant_documents("query", run_manager=MagicMock())
 
     assert len(docs) == len(medical_chunks)
 
@@ -259,9 +258,7 @@ def test_provenance_retriever_handles_missing_url_metadata_key(
         base_retriever=mock_base,
         config=two_domain_config,
     )
-    docs = retriever._get_relevant_documents(
-        "query", run_manager=MagicMock()
-    )
+    docs = retriever._get_relevant_documents("query", run_manager=MagicMock())
 
     # Document with missing URL is blocked when allowed_domains is set.
     assert docs == []
@@ -278,9 +275,7 @@ def test_provenance_retriever_returns_documents_not_chunks(
         base_retriever=mock_base,
         config=Config(),
     )
-    docs = retriever._get_relevant_documents(
-        "query", run_manager=MagicMock()
-    )
+    docs = retriever._get_relevant_documents("query", run_manager=MagicMock())
 
     assert all(isinstance(d, _FakeDocument) for d in docs)
     assert not any(isinstance(d, Chunk) for d in docs)

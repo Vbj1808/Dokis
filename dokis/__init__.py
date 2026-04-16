@@ -15,7 +15,7 @@ Usage::
     clean_chunks = dokis.filter(raw_chunks, config)
     result = dokis.audit(query, clean_chunks, response, config=config)
 
-    if not result.passed:
+    if not result.trust_passed:
         raise dokis.ComplianceViolation(result)
 """
 
@@ -32,6 +32,7 @@ from dokis.models import (
     Claim,
     ClaimVerdict,
     ProvenanceResult,
+    SourceFreshness,
 )
 
 # Module-level default configuration set via configure().
@@ -168,6 +169,7 @@ __all__ = [
     "Claim",
     "BlockedSource",
     "ClaimVerdict",
+    "SourceFreshness",
     "ProvenanceResult",
     "ProvenanceMiddleware",
     "ComplianceViolation",
@@ -175,4 +177,4 @@ __all__ = [
 ]
 
 # Version
-__version__ = "0.1.2"
+__version__ = "0.1.3"

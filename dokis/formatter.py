@@ -28,6 +28,9 @@ _BLOCK_REASON_LABELS = {
 _POLICY_ISSUE_LABELS = {
     "blocked_sources": "blocked_sources",
     "unsupported_claims": "unsupported_claims",
+    "stale_sources": "stale_sources",
+    "stale_supported_claims": "stale_supported_claims",
+    "unknown_source_ages": "unknown_source_ages",
 }
 
 
@@ -57,9 +60,15 @@ def render_audit_report(
             use_color,
         ),
         _render_policy_issues(result, report_width, use_color),
-        _render_sources(allowed_urls, blocked_entries, report_width, use_color),
+        _render_sources(
+            allowed_urls,
+            blocked_entries,
+            result,
+            report_width,
+            use_color,
+        ),
         _render_claims(result, report_width, use_color),
-        _render_compliance(result, report_width, use_color),
+        _render_final_trust(result, report_width, use_color),
     ]
     return "\n\n".join(section for section in sections if section).rstrip() + "\n"
 
@@ -87,8 +96,17 @@ def _render_summary(
         f"Enforcement mode: {_safe_text(result.enforcement_mode)}",
         "Enforcement verdict: "
         f"{_format_enforcement_verdict(result.enforcement_verdict, use_color)}",
+        f"Support passed: {_format_bool(result.passed, use_color)}",
+        f"Freshness passed: {_format_bool(result.freshness_passed, use_color)}",
+        f"Trust passed: {_format_bool(result.trust_passed, use_color)}",
         f"Sources: {len(allowed_urls)} allowed, {len(blocked_entries)} blocked",
     ]
+    if result.freshness_enabled:
+        lines.append(
+            "Freshness policy: "
+            f"max_source_age_days={result.max_source_age_days}, "
+            f"stale_source_action={_safe_text(result.stale_source_action or '-')}"
+        )
     return "\n".join(lines)
 
 
@@ -111,6 +129,7 @@ def _render_policy_issues(
 def _render_sources(
     allowed_urls: list[str],
     blocked_entries: list[BlockedSource],
+    result: ProvenanceResult,
     width: int,
     use_color: bool,
 ) -> str:
@@ -118,8 +137,7 @@ def _render_sources(
 
     if not allowed_urls and not blocked_entries:
         lines.append(
-            _style("[PASS]", _ANSI_GREEN, use_color)
-            + " no source URLs were provided"
+            _style("[PASS]", _ANSI_GREEN, use_color) + " no source URLs were provided"
         )
         return "\n".join(lines)
 
@@ -137,8 +155,7 @@ def _render_sources(
     if blocked_entries:
         for entry in blocked_entries:
             blocked_line = (
-                f"{_style('[BLOCKED]', _ANSI_RED, use_color)} "
-                f"{_safe_text(entry.url)}"
+                f"{_style('[BLOCKED]', _ANSI_RED, use_color)} {_safe_text(entry.url)}"
             )
             lines.extend(
                 _wrap_lines(
@@ -147,12 +164,34 @@ def _render_sources(
                 )
             )
             domain = entry.domain or infer_domain(entry.url) or "-"
-            lines.append(
-                f"  domain: {_safe_text(domain)}"
-            )
+            lines.append(f"  domain: {_safe_text(domain)}")
             lines.append(f"  reason: {_BLOCK_REASON_LABELS[entry.reason]}")
     else:
         lines.append(_style("[BLOCKED]", _ANSI_RED, use_color) + " none")
+
+    freshness_details = [
+        detail
+        for detail in result.source_freshness_details
+        if detail.status != "not_applicable"
+    ]
+    if freshness_details:
+        for detail in freshness_details:
+            if detail.status == "fresh":
+                badge = _style("[FRESH]", _ANSI_GREEN, use_color)
+            elif detail.status == "stale":
+                badge = _style("[STALE]", _ANSI_YELLOW, use_color)
+            else:
+                badge = _style("[UNKNOWN AGE]", _ANSI_YELLOW, use_color)
+            lines.extend(_wrap_lines(f"{badge} {_safe_text(detail.url)}", width))
+            lines.append(
+                f"  source_date: {_safe_text(_format_date(detail.source_date))}"
+            )
+            lines.append(
+                f"  age_days: {_safe_text(_format_optional_int(detail.age_days))}"
+            )
+            lines.append(f"  metadata_key: {_safe_text(detail.metadata_key or '-')}")
+            if detail.note:
+                lines.extend(_wrap_lines(f"  note: {detail.note}", width))
 
     return "\n".join(lines)
 
@@ -172,34 +211,35 @@ def _render_claims(
         return "\n".join(lines)
 
     for verdict in result.claim_verdicts:
-        is_supported = verdict.verdict == "supported"
-        badge = _style(
-            "[SUPPORTED]" if is_supported else "[UNSUPPORTED]",
-            _ANSI_GREEN if is_supported else _ANSI_RED,
-            use_color,
-        )
+        badge = _claim_badge(verdict.trust_status, use_color)
         lines.extend(_wrap_lines(f"{badge} {verdict.claim_text}", width))
         lines.append(f"  confidence: {verdict.confidence:.2f}")
         lines.append(f"  source: {_safe_text(verdict.supporting_url or '-')}")
+        lines.append(f"  source_date: {_safe_text(_format_date(verdict.source_date))}")
+        lines.append(
+            "  source_age_days: "
+            f"{_safe_text(_format_optional_int(verdict.source_age_days))}"
+        )
         if verdict.note:
             lines.extend(_wrap_lines(f"  note: {verdict.note}", width))
     return "\n".join(lines)
 
 
-def _render_compliance(
+def _render_final_trust(
     result: ProvenanceResult,
     width: int,
     use_color: bool,
 ) -> str:
-    status = "PASSED" if result.passed else "FAILED"
-    status_style = _ANSI_GREEN if result.passed else _ANSI_RED
+    status = "PASSED" if result.trust_passed else "FAILED"
+    status_style = _ANSI_GREEN if result.trust_passed else _ANSI_RED
     lines = [
-        _section_heading("Final Compliance", use_color),
+        _section_heading("Final Trust", use_color),
         _wrap_lines(
-            f"Compliance: {result.compliance_rate:.1%} "
+            f"Support compliance: {result.compliance_rate:.1%} "
             f"(required: {result.min_citation_rate:.1%})",
             width,
         )[0],
+        f"Freshness policy passed: {_format_bool(result.freshness_passed, use_color)}",
         f"Status: {_style(status, status_style + _ANSI_BOLD, use_color)}",
     ]
     return "\n".join(lines)
@@ -227,6 +267,32 @@ def _format_enforcement_verdict(verdict: str, use_color: bool) -> str:
     if verdict == "passed":
         return _style(verdict, _ANSI_GREEN + _ANSI_BOLD, use_color)
     return _style(verdict, _ANSI_RED + _ANSI_BOLD, use_color)
+
+
+def _format_bool(value: bool, use_color: bool) -> str:
+    return _style(
+        "yes" if value else "no",
+        (_ANSI_GREEN if value else _ANSI_RED) + _ANSI_BOLD,
+        use_color,
+    )
+
+
+def _claim_badge(trust_status: str, use_color: bool) -> str:
+    if trust_status == "supported_fresh":
+        return _style("[SUPPORTED FRESH]", _ANSI_GREEN, use_color)
+    if trust_status == "supported_stale":
+        return _style("[SUPPORTED STALE]", _ANSI_YELLOW, use_color)
+    if trust_status == "supported_unknown_age":
+        return _style("[SUPPORTED AGE UNKNOWN]", _ANSI_YELLOW, use_color)
+    return _style("[UNSUPPORTED]", _ANSI_RED, use_color)
+
+
+def _format_date(value: object) -> str:
+    return str(value) if value is not None else "-"
+
+
+def _format_optional_int(value: int | None) -> str:
+    return str(value) if value is not None else "-"
 
 
 def _resolve_width(width: int | None) -> int:

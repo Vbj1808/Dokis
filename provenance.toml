@@ -14,5 +14,8 @@ extractor         = "regex"
 matcher           = "bm25"
 model             = "all-MiniLM-L6-v2"
 enforcement_mode  = "guardrail"
+max_source_age_days = 365
+stale_source_action = "fail"
+# source_date_metadata_key = "published_at"  # optional override; falls back to common keys like year/date
 # fail_on_violation = false  # legacy alias for enforcement_mode="enforce"
 domain            = "oncology"

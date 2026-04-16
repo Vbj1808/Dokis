@@ -20,8 +20,8 @@ from dokis.models import Chunk
 
 logger = logging.getLogger(__name__)
 
- 
-class ProvenanceRetriever(BaseRetriever): 
+
+class ProvenanceRetriever(BaseRetriever):
     """LangChain retriever that enforces source provenance via DomainEnforcer.
 
     Wraps any existing LangChain ``BaseRetriever`` and filters its results

@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3]
+
+### Added
+
+- **Temporal trust / freshness policy** - Dokis can now distinguish between
+  grounded claims that are fresh, grounded claims that are stale, and claims
+  that are unsupported. `Config` adds:
+  - `max_source_age_days`
+  - `stale_source_action = "warn" | "fail"`
+  - `source_date_metadata_key` for explicit metadata-key selection
+
+- **Local source-age derivation** - supporting source age is now derived from
+  `Chunk.metadata` only. Dokis recognises common local patterns such as
+  `published_at`, `date`, and `year`, with year-only values treated
+  conservatively as January 1 of that year.
+
+- **Freshness-aware trust result** - `Claim`, `ClaimVerdict`, and
+  `ProvenanceResult` now surface:
+  - claim freshness status and parsed source age
+  - `trust_status` values like `supported_fresh` and `supported_stale`
+  - `source_freshness_details`
+  - `freshness_passed` and `trust_passed`
+  - freshness-related policy issues and booleans
+
+- **Terrifying stale-support demo** - `sample_stale_audit.json` demonstrates
+  the new product message directly: an answer can be fully grounded and still
+  fail trust because its evidence is too old.
+
+### Changed
+
+- **Enforcement now evaluates trust, not only support** - `passed` remains the
+  backwards-compatible support/compliance field, but `enforcement_verdict`,
+  CLI exit codes, and `ComplianceViolation` now key off `trust_passed`.
+
+- **CLI trust report now exposes freshness explicitly** - the terminal report
+  now shows freshness policy settings, stale and unknown-age sources, fresh vs
+  stale claim badges, and a final trust section alongside support compliance.
+
+- **Docs and sample config updated** - `README.md`, `provenance.toml`, and the
+  new `AGENTS_NEW.md` now document freshness policy, result semantics, and the
+  stale-support demo path.
+
 ## [0.1.2]
 
 ### Added

@@ -39,10 +39,10 @@ _LLM_PROMPT_TEMPLATE = (
 #   the decimal point means \s+ cannot match at that position.
 # All lookbehinds are fixed-width for Python re compatibility.
 _SENTENCE_SPLIT = _re.compile(
-    r"(?<![A-Z][a-z]\.)" # not preceded by Uppercase+lowercase+period (Dr., Mr., etc.)
-    r"(?<!\s[A-Z]\.)"    # not preceded by whitespace+Uppercase+period (J. initial)
-    r"(?<=[.?!])"        # must follow sentence-ending punctuation
-    r"(?!\d)"            # not followed by a digit
+    r"(?<![A-Z][a-z]\.)"  # not preceded by Uppercase+lowercase+period (Dr., Mr., etc.)
+    r"(?<!\s[A-Z]\.)"  # not preceded by whitespace+Uppercase+period (J. initial)
+    r"(?<=[.?!])"  # must follow sentence-ending punctuation
+    r"(?!\d)"  # not followed by a digit
     r"\s+"
 )
 
