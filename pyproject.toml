@@ -4,11 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dokis"
-version = "0.1.3"
+version = "0.3.0"
 description = "Trust reporting and provenance enforcement for RAG pipelines. Audits claim grounding, source allowlists, and trust failures without an LLM call."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+authors = [
+    { name = "Balaji Jegadeesh Vijayaraghavan" }
+]
 keywords = ["rag","provenance","hallucination","langchain","llm","citation","compliance","retrieval-augmented-generation"]
 classifiers = [
     "Development Status :: 4 - Beta",

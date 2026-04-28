@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-04-27
+
+### Added
+
+- **Deterministic `extractor="claimify"`** - Claimify-inspired claim
+  extraction for the default local extraction path.
+- **Internal detailed extraction records** - `ClaimExtractor.extract_detailed()`
+  returns per-claim text, source sentence, extraction method, and flags while
+  `extract()` remains backwards-compatible as `list[str]`.
+- **Deterministic factual-claim selection** - drops clear opinion, directive,
+  and meta/filler sentences before provenance matching.
+- **Claimify ambiguity flags** - detailed claimify records mark unresolved
+  pronoun-led factual claims with `ambiguous_reference`.
+- **Conservative compound-claim decomposition** - splits simple shared-subject
+  verb lists into smaller claim units when the split is unambiguous.
+- **Safer decomposition and list handling** - claimify now handles shared
+  subject predicate lists, conservative support/include object lists,
+  independently valid semicolon clauses, and simple lead-in bullet/numbered
+  lists.
+- **Order-preserving claimify deduplication** - duplicate claims are removed
+  after quality gates while preserving the first extracted spelling/casing.
+- **Claim extraction benchmark harness** - `python
+  benchmarks/run_claim_extraction.py` compares current extractors against the
+  public `microsoft/claimify-dataset` factual-claim selection labels.
+- **No LLM/API/model dependency** - the `claimify` extractor is local,
+  rule-based, and adds no mandatory runtime dependencies.
+
+### Changed
+
+- **Default extractor changed to `claimify`** - zero-config audits now use the
+  deterministic Claimify-inspired extractor by default while preserving
+  `extractor="regex"` for the legacy sentence splitter. Users who want the
+  previous sentence-splitting behavior can set `Config(extractor="regex")`.
+- **Hardened claimify selection** - the default extractor now requires
+  non-trivial predicates, preserves useful product/configuration claims, and
+  drops more generic advice, meta text, opinion, and vague pronoun claims.
+- **Benchmark-guided claimify tuning** - selection rules now recover more
+  short, passive, modal, copula, and pronoun-led factual claims while filtering
+  more assistant filler, broad setup text, and list headers.
+- **Claimify default-readiness hardening** - improved
+  definitional/classification claim retention, short bullet fact handling, and
+  filler/header/citation-fragment filtering before the default flip, without
+  adding runtime dependencies.
+- **Refreshed claimify selection benchmark results** - the development
+  benchmark summary now reports `claimify` at 0.742 precision, 0.881 recall,
+  and 0.805 F1 on the public factual-claim selection labels.
+
 ## [0.1.3]
 
 ### Added
@@ -268,5 +315,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   internals with `unittest.mock` have been migrated to `pytest`'s `monkeypatch`
   fixture for consistency with the rest of the test suite.
 
+[0.3.0]: https://github.com/Vbj1808/dokis/releases/tag/v0.3.0
+[0.2.0]: https://github.com/Vbj1808/dokis/releases/tag/v0.2.0
+[0.1.3]: https://github.com/Vbj1808/dokis/releases/tag/v0.1.3
+[0.1.2]: https://github.com/Vbj1808/dokis/releases/tag/v0.1.2
 [0.1.1]: https://github.com/Vbj1808/dokis/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Vbj1808/dokis/releases/tag/v0.1.0

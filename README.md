@@ -39,7 +39,7 @@ Dokis does three trust checks in one deterministic runtime pass:
 
 **1. Pre-retrieval enforcement.** Strip chunks whose source URL is not on your allowlist before they enter the prompt.
 
-**2. Post-generation support auditing.** Split the response into atomic claim sentences. Match each claim to the best supporting chunk using BM25 lexical scoring by default. Build a `claim → chunk → URL` provenance map. Compute a compliance rate.
+**2. Post-generation support auditing.** Extract verifiable factual claims from the response using the default deterministic Claimify-inspired extractor. Match each claim to the best supporting chunk using BM25 lexical scoring by default. Build a `claim → chunk → URL` provenance map. Compute a compliance rate.
 
 **3. Temporal trust evaluation.** If freshness policy is configured, derive source age from chunk metadata and distinguish `supported_fresh`, `supported_stale`, and `unsupported`. Return stale-source details, freshness-aware claim verdicts, policy issues, and a final trust verdict.
 
@@ -200,7 +200,7 @@ dokis.Config(
     allowed_domains   = [],
     min_citation_rate = 0.80,
     claim_threshold   = 0.35,
-    extractor         = "regex",        # "regex" | "nltk" | "llm"
+    extractor         = "claimify",     # "claimify" | "regex" | "nltk" | "llm"
     matcher           = "bm25",         # "bm25" | "semantic"
     model             = "all-MiniLM-L6-v2",
     enforcement_mode  = "guardrail",    # "audit" | "guardrail" | "enforce"
@@ -214,6 +214,44 @@ dokis.Config(
 `fail_on_violation` still works as a backwards-compatible alias for
 `enforcement_mode="enforce"`, but `enforcement_mode` is the recommended
 interface for new configs and examples.
+
+`extractor="claimify"` is the default deterministic extractor. It is
+English-oriented and Claimify-inspired, with verifiable-claim selection,
+conservative decomposition, and simple bullet/list handling for RAG-style
+answers. It does not reproduce Claimify, does not perform citation
+faithfulness checks or full decontextualization, and does not add an LLM, API,
+model, or mandatory dependency. The legacy splitter remains available with
+`extractor="regex"` for users who want the old sentence-boundary behavior.
+
+### Claim extraction benchmark
+
+Dokis now uses `extractor="claimify"` by default. The goal is better
+factual-claim selection before provenance matching, without adding an LLM call,
+model download, runtime network call, or mandatory dependency.
+
+On the public `microsoft/claimify-dataset` factual-claim selection benchmark:
+
+| Extractor | Precision | Recall | F1 |
+|---|---:|---:|---:|
+| `regex` | 0.645 | 0.975 | 0.776 |
+| `nltk` | 0.645 | 0.976 | 0.776 |
+| `claimify` default | **0.742** | 0.881 | **0.805** |
+
+This benchmark measures Selection-stage factual-claim detection only. It does
+not measure full Claimify reproduction, element-level coverage, citation
+faithfulness, answer correctness, or hallucination prevention.
+
+For development feedback, the claim selection benchmark can be run from the
+repo root:
+
+```bash
+python benchmarks/run_claim_extraction.py
+```
+
+It downloads the public `microsoft/claimify-dataset` CSV at benchmark runtime
+and compares extractor selection against the dataset's
+`contains_factual_claim` labels. This benchmark is not part of the runtime
+package contract and adds no mandatory dependency.
 
 **`claim_threshold` by matcher:**
 - `matcher="bm25"`: normalised per-query BM25 score. Recommended: `0.3–0.5`.
@@ -326,7 +364,7 @@ BM25 is **23× faster** per audit call. The BM25 index is cached per chunk set -
 | `bm25` (default) | 5/5 | 4/4 ✦ |
 | `semantic` | 5/5 | 4/4 ✦ |
 
-✦ One claim was 7 words - below the 8-word minimum - and filtered before matching. Effective ungrounded rejection rate is 100% for both matchers.
+✦ In this tiny hand-written benchmark, both matchers rejected all ungrounded claims that reached the matcher, for an effective ungrounded rejection rate of 100%.
 
 ---
 

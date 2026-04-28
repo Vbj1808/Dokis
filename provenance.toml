@@ -10,7 +10,8 @@ allowed_domains = [
 
 min_citation_rate = 0.85
 claim_threshold   = 0.30
-extractor         = "regex"
+# claimify is the default extractor; set "regex" here to preserve the legacy splitter.
+extractor         = "claimify"
 matcher           = "bm25"
 model             = "all-MiniLM-L6-v2"
 enforcement_mode  = "guardrail"

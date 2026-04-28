@@ -47,6 +47,7 @@ def test_config_defaults_to_guardrail_mode() -> None:
     config = Config()
     assert config.enforcement_mode == "guardrail"
     assert config.fail_on_violation is False
+    assert config.extractor == "claimify"
 
 
 def test_enforcement_mode_overrides_legacy_fail_on_violation() -> None:
@@ -62,3 +63,13 @@ def test_enforcement_mode_overrides_legacy_fail_on_violation() -> None:
 def test_config_rejects_negative_max_source_age_days() -> None:
     with pytest.raises(ValueError, match="max_source_age_days"):
         Config(max_source_age_days=-1)
+
+
+def test_config_accepts_claimify_extractor() -> None:
+    config = Config(extractor="claimify")
+    assert config.extractor == "claimify"
+
+
+def test_config_still_accepts_regex_extractor() -> None:
+    config = Config(extractor="regex")
+    assert config.extractor == "regex"

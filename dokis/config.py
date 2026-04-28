@@ -43,8 +43,9 @@ class Config(BaseModel):
               trigger a WARNING at construction time.
 
             Must be in ``[0.0, 1.0]``. Defaults to ``0.72``.
-        extractor: Sentence extraction strategy. ``"regex"`` uses a fast
-            punctuation-boundary splitter (default, zero extra dependencies).
+        extractor: Sentence extraction strategy. ``"claimify"`` is the default
+            deterministic factual-claim selector and conservative decomposer.
+            ``"regex"`` uses the legacy fast punctuation-boundary splitter.
             ``"nltk"`` uses NLTK for higher accuracy (requires
             ``pip install dokis[nltk]``). ``"llm"`` delegates to a
             user-supplied callable - never hardcodes any LLM client.
@@ -85,7 +86,7 @@ class Config(BaseModel):
     allowed_domains: list[str] = Field(default_factory=list)
     min_citation_rate: float = 0.80
     claim_threshold: float = 0.35
-    extractor: Literal["regex", "nltk", "llm"] = "regex"
+    extractor: Literal["regex", "nltk", "llm", "claimify"] = "claimify"
     matcher: Literal["bm25", "semantic"] = "bm25"
     model: str = "all-MiniLM-L6-v2"
     enforcement_mode: Literal["audit", "guardrail", "enforce"] | None = None
